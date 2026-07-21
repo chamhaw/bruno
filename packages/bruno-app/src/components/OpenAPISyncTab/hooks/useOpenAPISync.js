@@ -229,11 +229,11 @@ const useOpenAPISync = (collection) => {
         try {
           const { specType } = await fetchAndValidateApiSpecFromUrl({ url: trimmedUrl });
           if (specType !== 'openapi') {
-            setError('The URL does not point to a valid OpenAPI 3.x specification');
+            setError('The URL does not point to a valid OpenAPI or Swagger specification');
             return;
           }
         } catch {
-          setError('The URL does not point to a valid OpenAPI 3.x specification');
+          setError('The URL does not point to a valid OpenAPI or Swagger specification');
           return;
         }
       }
@@ -362,11 +362,11 @@ const useOpenAPISync = (collection) => {
       try {
         ({ specType } = await fetchAndValidateApiSpecFromUrl({ url: newUrl }));
       } catch {
-        toast.error('The URL does not point to a valid OpenAPI 3.x specification');
+        toast.error('The URL does not point to a valid OpenAPI or Swagger specification');
         throw new Error('Invalid OpenAPI specification');
       }
       if (specType !== 'openapi') {
-        toast.error('The URL does not point to a valid OpenAPI 3.x specification');
+        toast.error('The URL does not point to a valid OpenAPI or Swagger specification');
         throw new Error('Invalid OpenAPI specification');
       }
     }

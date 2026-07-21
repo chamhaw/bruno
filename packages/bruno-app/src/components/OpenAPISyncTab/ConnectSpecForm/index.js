@@ -77,11 +77,7 @@ const ConnectSpecForm = ({ sourceUrl, setSourceUrl, isLoading, error, setError, 
                   try {
                     const data = await parseFileAsJsonOrYaml(file);
                     if (!isOpenApiSpec(data)) {
-                      setError('The selected file is not a valid OpenAPI 3.x specification');
-                      return;
-                    }
-                    if (data.swagger && String(data.swagger).startsWith('2')) {
-                      setError('Swagger 2.0 is not supported. Please convert your spec to OpenAPI 3.x.');
+                      setError('The selected file is not a valid OpenAPI or Swagger specification');
                       return;
                     }
                     const filePath = window.ipcRenderer.getFilePath(file);
@@ -112,7 +108,7 @@ const ConnectSpecForm = ({ sourceUrl, setSourceUrl, isLoading, error, setError, 
         </div>
         <p className="setup-hint">
           {mode === 'url'
-            ? 'Supports OpenAPI 3.x specifications in JSON or YAML format'
+            ? 'Supports OpenAPI 3.x and Swagger 2.0 specifications in JSON or YAML format'
             : 'Select a local OpenAPI/Swagger JSON or YAML file'}
         </p>
         {error && (
