@@ -136,14 +136,15 @@ const ResponseTab = ({ response, request, collection }) => {
 
 const NetworkTab = ({ response }) => {
   const timeline = response?.timeline || [];
+  const displayTimeline = Array.isArray(timeline) ? timeline : [{ type: 'info', message: timeline }];
 
   return (
     <div className="tab-content">
       <div className="section">
         <h4>Network Logs</h4>
         <div className="network-logs-wrapper">
-          {timeline.length > 0 ? (
-            <Network logs={timeline} />
+          {displayTimeline.length > 0 ? (
+            <Network logs={displayTimeline} showCopy={false} />
           ) : (
             <div className="empty-state">No network logs available</div>
           )}
@@ -165,7 +166,6 @@ const RequestDetailsPanel = () => {
   const { request, response } = data;
 
   const collection = collections.find((c) => c.uid === selectedRequest.collectionUid);
-
   const handleClose = () => {
     dispatch(clearSelectedRequest());
   };
