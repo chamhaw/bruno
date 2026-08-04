@@ -12,14 +12,15 @@ const safeStringifyJSONIfNotString = (obj) => {
 };
 
 const Request = ({ collection, request, item }) => {
-  let { headers, data, dataBuffer, error } = request || {};
+  const { headers, data, error } = request || {};
+  let { dataBuffer } = request || {};
   if (!dataBuffer) {
     dataBuffer = Buffer.from(safeStringifyJSONIfNotString(data))?.toString('base64');
   }
 
   return (
     <>
-      <Headers headers={headers} />
+      <Headers headers={headers} type="request" />
       <BodyBlock
         collection={collection}
         data={data}

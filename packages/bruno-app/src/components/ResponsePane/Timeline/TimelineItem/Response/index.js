@@ -23,7 +23,7 @@ const statusColor = (theme, statusCode) => {
 const ResponseMeta = ({ code, statusText, duration, size }) => {
   const { theme } = useTheme();
   const sizeLabel = typeof size === 'number' ? formatSize(size) : null;
-  const hasCode = code != null;
+  const hasCode = code !== null && code !== undefined;
   const hasAny = hasCode || statusText || (typeof duration === 'number') || sizeLabel;
   if (!hasAny) return null;
   return (
@@ -42,7 +42,8 @@ const ResponseMeta = ({ code, statusText, duration, size }) => {
 };
 
 const Response = ({ collection, response, item }) => {
-  let { status, statusCode, statusText, dataBuffer, headers, data, error, duration, size } = response || {};
+  const { status, statusCode, statusText, headers, data, error, duration, size } = response || {};
+  let { dataBuffer } = response || {};
   if (!dataBuffer) {
     dataBuffer = Buffer.from(safeStringifyJSONIfNotString(data))?.toString('base64');
   }
@@ -55,7 +56,7 @@ const Response = ({ collection, response, item }) => {
         duration={duration}
         size={size}
       />
-      <Headers headers={headers} />
+      <Headers headers={headers} type="response" />
       <BodyBlock
         collection={collection}
         data={data}
