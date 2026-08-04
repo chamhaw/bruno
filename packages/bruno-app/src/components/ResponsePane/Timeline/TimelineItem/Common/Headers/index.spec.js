@@ -3,19 +3,33 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import Headers from './index';
 
-jest.mock('components/CodeEditor', () => ({ value, readOnly, mode, theme, onEdit }) => (
+jest.mock('components/CodeEditor', () => ({ value, readOnly, mode, theme, font, fontSize, onEdit }) => (
   <textarea
     data-testid="timeline-code-editor"
     value={value}
     readOnly={readOnly}
     data-mode={mode}
     data-theme={theme}
+    data-font={font}
+    data-font-size={fontSize}
     data-has-on-edit={onEdit ? 'true' : undefined}
     onChange={onEdit}
   />
 ));
 
 jest.mock('providers/Theme', () => ({ useTheme: () => ({ storedTheme: 'system', displayedTheme: 'dark' }) }));
+jest.mock('react-redux', () => ({
+  useSelector: (selector) => selector({
+    app: {
+      preferences: {
+        font: {
+          codeFont: 'Fira Code',
+          codeFontSize: 13
+        }
+      }
+    }
+  })
+}));
 
 describe('Timeline Headers', () => {
   it('defaults to the Key/Value table and switches to readonly Bulk text', () => {
@@ -38,6 +52,8 @@ describe('Timeline Headers', () => {
     expect(editor).toHaveAttribute('readonly');
     expect(editor).toHaveAttribute('data-mode', 'text/plain');
     expect(editor).toHaveAttribute('data-theme', 'dark');
+    expect(editor).toHaveAttribute('data-font', 'Fira Code');
+    expect(editor).toHaveAttribute('data-font-size', '13');
     expect(editor).not.toHaveAttribute('data-has-on-edit');
     expect(editor).toHaveValue('content-type:application/json; charset=utf-8\nX-Request:request-value');
     expect(screen.getByTestId('request-headers-view-toggle')).toHaveTextContent('Key/Value');

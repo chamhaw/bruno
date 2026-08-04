@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import get from 'lodash/get';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons';
+import { useSelector } from 'react-redux';
 import { useTheme } from 'providers/Theme';
 import CodeEditor from 'components/CodeEditor';
 import { serializeBulkKeyValue } from 'utils/common/bulkKeyValueUtils';
@@ -34,6 +36,7 @@ const stringifyHeaderValue = (value) => {
 };
 
 const Headers = ({ headers, type }) => {
+  const preferences = useSelector((state) => state.app.preferences);
   const { displayedTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(true);
   const [viewMode, setViewMode] = useState('key-value');
@@ -52,6 +55,8 @@ const Headers = ({ headers, type }) => {
         <CodeEditor
           mode="text/plain"
           theme={displayedTheme}
+          font={get(preferences, 'font.codeFont', 'default')}
+          fontSize={get(preferences, 'font.codeFontSize')}
           value={bulkText}
           readOnly={true}
         />
