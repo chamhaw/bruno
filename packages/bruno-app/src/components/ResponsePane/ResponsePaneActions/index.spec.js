@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider } from 'styled-components';
 import ResponsePaneActions from './index';
+import { buildSelectedRequestForResponseActions } from '../copyForAIPayload';
 
 jest.mock('react-hot-toast', () => ({
   success: jest.fn(),
@@ -134,5 +135,28 @@ describe('ResponsePaneActions', () => {
     expect(screen.getByRole('menuitem', { name: 'Copy for AI' })).toBeInTheDocument();
     expect(screen.getByTestId('copy-for-ai-icon')).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Copy as Markdown' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the response network logs when preparing the Copy for AI payload', () => {
+    const responseTimeline = [
+      { type: 'request', message: 'GET https://api.example.com/v1/workspaces/42' },
+      { type: 'request', message: 'Authorization: Bearer test-token' }
+    ];
+
+    const selectedRequest = buildSelectedRequestForResponseActions({
+      item: {
+        ...item,
+        response: {
+          ...item.response,
+          timeline: responseTimeline
+        }
+      },
+      collection: {
+        uid: 'col-1',
+        timeline: [{ itemUid: item.uid, type: 'request', message: 'GET {{baseUrl}}/v1/workspaces/:workspaceId' }]
+      }
+    });
+
+    expect(selectedRequest.data.response.timeline).toBe(responseTimeline);
   });
 });
