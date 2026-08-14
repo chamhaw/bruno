@@ -24,6 +24,7 @@ import HeightBoundContainer from 'ui/HeightBoundContainer';
 import ResponseStopWatch from 'components/ResponsePane/ResponseStopWatch';
 import WSMessagesList from './WsResponsePane/WSMessagesList';
 import ResponsiveTabs from 'ui/ResponsiveTabs';
+import { buildSelectedRequestForResponseActions } from './copyForAIPayload';
 
 // Width threshold for expanded right-side action buttons
 const RIGHT_CONTENT_EXPANDED_WIDTH = 135;
@@ -274,15 +275,7 @@ const ResponsePane = ({ item, collection }) => {
           <ResponsePaneActions
             item={item}
             collection={collection}
-            selectedRequest={{
-              itemUid: item.uid,
-              collectionUid: collection.uid,
-              timestamp: item.timestamp,
-              data: {
-                request: item.request,
-                response: { ...response, timeline: requestTimeline }
-              }
-            }}
+            selectedRequest={buildSelectedRequestForResponseActions({ item, collection })}
             responseSize={responseSize}
             selectedFormat={selectedFormat}
             selectedTab={selectedViewTab}
