@@ -1,6 +1,7 @@
 import React, { forwardRef, useRef } from 'react';
 import styled from 'styled-components';
 import { IconDots, IconDownload, IconEraser, IconBookmark, IconCopy, IconLayoutColumns, IconLayoutRows } from '@tabler/icons';
+import toast from 'react-hot-toast';
 import MenuDropdown from 'ui/MenuDropdown';
 import ResponseDownload from '../ResponseDownload';
 import ResponseBookmark from '../ResponseBookmark';
@@ -8,6 +9,8 @@ import ResponseClear from '../ResponseClear';
 import ResponseLayoutToggle, { useResponseLayoutToggle } from '../ResponseLayoutToggle';
 import ResponseCopy from '../ResponseCopy/index';
 import StyledWrapper from './StyledWrapper';
+import { buildResponseDebugMarkdown } from 'utils/response/debugContextMarkdown';
+import IconSparkles from 'components/Icons/IconSparkles';
 
 const StyledMenuIcon = styled.button`
   display: flex;
@@ -37,7 +40,7 @@ const MenuIcon = forwardRef((props, ref) => (
 
 MenuIcon.displayName = 'MenuIcon';
 
-const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, selectedTab, data, dataBuffer }) => {
+const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, selectedTab, data, dataBuffer, selectedRequest }) => {
   const { orientation } = useResponseLayoutToggle();
 
   // Refs to access child component imperative handles (click, isDisabled)
@@ -46,6 +49,16 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
   const clearButtonRef = useRef(null);
   const copyButtonRef = useRef(null);
   const layoutToggleButtonRef = useRef(null);
+
+  const copyForAI = async () => {
+    try {
+      const markdown = buildResponseDebugMarkdown({ selectedRequest, collection, item });
+      await navigator.clipboard.writeText(markdown);
+      toast.success('Debug context copied for AI');
+    } catch (error) {
+      toast.error('Failed to copy API debug context');
+    }
+  };
 
   /**
    * GQL response actions missing with Save response - because their is schema validation missing for saving GQL response will undo once example
@@ -60,6 +73,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
         return copyButtonRef.current?.isDisabled ?? false;
       },
       onClick: () => copyButtonRef.current?.click()
+    },
+    {
+      id: 'copy-for-ai',
+      label: 'Copy for AI',
+      leftSection: <IconSparkles size={16} strokeWidth={1.5} color="currentColor" />,
+      onClick: copyForAI
     },
     {
       id: 'download-response',
@@ -99,6 +118,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
         return copyButtonRef.current?.isDisabled ?? false;
       },
       onClick: () => copyButtonRef.current?.click()
+    },
+    {
+      id: 'copy-for-ai',
+      label: 'Copy for AI',
+      leftSection: <IconSparkles size={16} strokeWidth={1.5} color="currentColor" />,
+      onClick: copyForAI
     },
     {
       id: 'save-response',

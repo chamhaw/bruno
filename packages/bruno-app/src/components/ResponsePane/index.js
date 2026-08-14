@@ -274,6 +274,15 @@ const ResponsePane = ({ item, collection }) => {
           <ResponsePaneActions
             item={item}
             collection={collection}
+            selectedRequest={{
+              itemUid: item.uid,
+              collectionUid: collection.uid,
+              timestamp: item.timestamp,
+              data: {
+                request: item.request,
+                response: { ...response, timeline: requestTimeline }
+              }
+            }}
             responseSize={responseSize}
             selectedFormat={selectedFormat}
             selectedTab={selectedViewTab}
