@@ -11,8 +11,12 @@ const {
   stringifyCollection,
   stringifyFolder
 } = require('@usebruno/filestore');
-const { openApiToBruno } = require('@usebruno/converters');
 const { resolveEnvironmentInheritance } = require('@usebruno/common/utils');
+const {
+  convertApiSpecToBruno,
+  getUnsupportedApiSpecMessage,
+  isSupportedApiSpecForSync
+} = require('./openapi-sync/spec-support');
 const { writeFile, sanitizeName, getCollectionFormat, posixifyPath } = require('../utils/filesystem');
 
 const RESERVED_FOLDER_NAMES = ['node_modules', '.git', 'environments', 'mocks'];
@@ -148,19 +152,6 @@ const parseSpec = (content) => {
   } catch {
     return jsyaml.load(content);
   }
-};
-
-/**
- * Validate that a parsed spec object is a valid OpenAPI 3.x document.
- * Swagger 2.0 is not supported — the converter only handles OpenAPI 3.x.
- */
-const isValidOpenApiSpec = (spec) => {
-  if (!spec || typeof spec !== 'object') return false;
-  if (spec.swagger) return false;
-  if (spec.openapi && typeof spec.openapi === 'string' && spec.openapi.startsWith('3.')) {
-    return spec.paths && typeof spec.paths === 'object';
-  }
-  return false;
 };
 
 /**
@@ -874,7 +865,7 @@ const loadStoredSpecCollection = (collectionPath, brunoConfig) => {
   const specRaw = fs.readFileSync(specPath, 'utf8');
   const storedSpec = parseSpec(specRaw);
   const groupBy = brunoConfig?.openapi?.[0]?.groupBy || 'tags';
-  return openApiToBruno(storedSpec, { groupBy });
+  return convertApiSpecToBruno(storedSpec, { groupBy });
 };
 
 const registerOpenAPISyncIpc = (mainWindow) => {
@@ -902,8 +893,8 @@ const registerOpenAPISyncIpc = (mainWindow) => {
       // This ensures specDrift uses the same comparison sensitivity as collectionDrift/remoteDrift.
       const compareSpecs = (oldSpec, newSpec, groupBy) => {
         // Convert both specs to Bruno collection format
-        const oldBruno = oldSpec ? openApiToBruno(oldSpec, { groupBy }) : { items: [] };
-        const newBruno = newSpec ? openApiToBruno(newSpec, { groupBy }) : { items: [] };
+        const oldBruno = oldSpec ? convertApiSpecToBruno(oldSpec, { groupBy }) : { items: [] };
+        const newBruno = newSpec ? convertApiSpecToBruno(newSpec, { groupBy }) : { items: [] };
 
         // Build endpoint maps keyed by METHOD:normalizedPath
         const oldItems = buildSpecItemsMap(oldBruno.items || []);
@@ -1002,10 +993,8 @@ const registerOpenAPISyncIpc = (mainWindow) => {
       const newSpecContent = fetchResult.content;
       const newSpec = fetchResult.spec;
 
-      if (!isValidOpenApiSpec(newSpec)) {
-        const error = newSpec?.swagger
-          ? 'Swagger 2.0 is not supported. Please convert your spec to OpenAPI 3.x.'
-          : 'The source does not contain a valid OpenAPI 3.x specification';
+      if (!isSupportedApiSpecForSync(newSpec)) {
+        const error = getUnsupportedApiSpecMessage(newSpec);
         return {
           isValid: false,
           error,
@@ -1120,7 +1109,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
       }
 
       // Convert spec to Bruno collection format
-      const specAsCollection = openApiToBruno(specToCompare, { groupBy });
+      const specAsCollection = convertApiSpecToBruno(specToCompare, { groupBy });
 
       // Build map of expected items by endpoint ID (method:path)
       const specItems = buildSpecItemsMap(specAsCollection.items || []);
@@ -1282,7 +1271,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
 
       // Convert spec to Bruno collection format
       const groupBy = brunoConfig?.openapi?.[0]?.groupBy || 'tags';
-      const specAsCollection = openApiToBruno(specToUse, { groupBy });
+      const specAsCollection = convertApiSpecToBruno(specToUse, { groupBy });
 
       // Find the spec item for this endpoint
       const specItem = findItemInCollection(specAsCollection.items || [], method, endpointPath)?.item || null;
@@ -1387,7 +1376,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
       // Mode: reset - Save spec and reset all endpoints to spec (preserve tests/scripts)
       if (mode === 'reset' && diff.newSpec) {
         const groupBy = brunoConfig?.openapi?.[0]?.groupBy || 'tags';
-        const newCollection = openApiToBruno(diff.newSpec, { groupBy });
+        const newCollection = convertApiSpecToBruno(diff.newSpec, { groupBy });
 
         // Build map of spec items by endpoint ID
         const specItemsMap = buildSpecItemsMap(newCollection.items || []);
@@ -1469,7 +1458,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
       let newCollection;
       if (diff.newSpec) {
         try {
-          newCollection = openApiToBruno(diff.newSpec, { groupBy });
+          newCollection = convertApiSpecToBruno(diff.newSpec, { groupBy });
         } catch (err) {
           console.error('[OpenAPI Sync] Error converting spec:', err);
         }
@@ -1616,7 +1605,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
           const storedSpecPath = applySpecEntry ? path.join(getSpecsDir(), applySpecEntry.filename) : null;
           if (storedSpecPath && fs.existsSync(storedSpecPath)) {
             try {
-              driftCollection = openApiToBruno(parseSpec(fs.readFileSync(storedSpecPath, 'utf8')), { groupBy });
+              driftCollection = convertApiSpecToBruno(parseSpec(fs.readFileSync(storedSpecPath, 'utf8')), { groupBy });
             } catch (err) {
               console.error('[OpenAPI Sync] Error converting stored spec for drift reset:', err);
             }
@@ -1747,10 +1736,8 @@ const registerOpenAPISyncIpc = (mainWindow) => {
     try {
       const result = await fetchSpecFromSource({ collectionUid, collectionPath, sourceUrl, environmentContext });
       if (result.error) return { error: result.error, errorCode: result.errorCode };
-      if (!isValidOpenApiSpec(result.spec)) {
-        const error = result.spec?.swagger
-          ? 'Swagger 2.0 is not supported. Please convert your spec to OpenAPI 3.x.'
-          : 'The source does not contain a valid OpenAPI 3.x specification';
+      if (!isSupportedApiSpecForSync(result.spec)) {
+        const error = getUnsupportedApiSpecMessage(result.spec);
         return { error };
       }
       return { content: result.content };

@@ -119,7 +119,6 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
   const isZipImport = format === 'bruno-zip';
   const isOpenApiFromUrl = isOpenApi && !!sourceUrl && !filePath;
   const isOpenApiFromFile = isOpenApi && !!filePath && !sourceUrl;
-  const isSwagger2 = isOpenApi && rawData?.swagger && String(rawData.swagger).startsWith('2');
   const showCheckForSpecUpdatesOption = isOpenApiFromUrl || isOpenApiFromFile;
 
   const { workspaces, activeWorkspaceUid } = useSelector((state) => state.workspaces);
@@ -410,23 +409,20 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
               </div>
             )}
             {showCheckForSpecUpdatesOption && (
-              <label className={`mt-4 flex items-start gap-2 ${isSwagger2 ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
-                <input
-                  type="checkbox"
-                  checked={isSwagger2 ? false : enableCheckForSpecUpdates}
-                  onChange={(e) => setEnableCheckForSpecUpdates(e.target.checked)}
-                  disabled={isSwagger2}
-                  className={`checkbox mt-0.5 ${isSwagger2 ? '' : 'cursor-pointer'}`}
-                />
-                <div>
-                  <span className="checkbox-option-label">Check for Spec Updates</span>
-                  <p className="checkbox-option-description">
-                    {isSwagger2
-                      ? 'OpenAPI Sync is not supported for Swagger 2.0 specs.'
-                      : 'Stay notified of spec changes and sync your collection with the spec.'}
-                  </p>
-                </div>
-              </label>
+              <div className="mt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableCheckForSpecUpdates}
+                    onChange={(e) => setEnableCheckForSpecUpdates(e.target.checked)}
+                    className="checkbox cursor-pointer"
+                  />
+                  <span className="font-medium">Check for Spec Updates</span>
+                </label>
+                <p className="text-muted text-xs mt-1">
+                  Stay notified of spec changes and sync your collection with the spec.
+                </p>
+              </div>
             )}
           </form>
         </Modal>
