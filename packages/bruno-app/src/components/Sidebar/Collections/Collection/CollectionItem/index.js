@@ -41,7 +41,7 @@ import RunCollectionItem from './RunCollectionItem';
 import GenerateCodeItem from './GenerateCodeItem';
 import { isItemARequest, isItemAFolder, scrollToTheActiveTab } from 'utils/tabs';
 import { doesRequestMatchSearchText, doesFolderHaveItemsMatchSearchText } from 'utils/collections/search';
-import { getDefaultRequestPaneTab, getItemTypeLabel } from 'utils/collections';
+import { getDefaultRequestPaneTab, getItemTypeLabel, sortExamplesForSidebar } from 'utils/collections';
 import toast from 'react-hot-toast';
 import StyledWrapper from './StyledWrapper';
 import NetworkError from 'components/ResponsePane/NetworkError/index';
@@ -882,7 +882,7 @@ const CollectionItem = ({ item, collectionUid, collectionPathname, searchText, o
       {/* Show examples when expanded (only for HTTP requests) */}
       {isItemARequest(item) && item.type === 'http-request' && examplesExpanded && hasExamples && (
         <div>
-          {(item.examples || []).map((example, index) => {
+          {sortExamplesForSidebar(item.examples || [], collectionSortOrder).map((example, index) => {
             return (
               <ExampleItem
                 key={example.uid || index}

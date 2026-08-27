@@ -963,6 +963,28 @@ export const sortItemsBySidebarOrder = (items = []) => {
   );
 };
 
+/**
+ * Orders a request's response examples for display in the sidebar, following the
+ * collection sort mode ('alphabetical' / 'reverseAlphabetical' / 'default').
+ *
+ * This is a view-only ordering: the source `item.examples` array is the on-disk order
+ * and must stay untouched, because `exampleIndex` (tab identity in tabs.js and the
+ * tasks middleware queue) is computed from positions in that source array.
+ */
+const exampleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+export const sortExamplesForSidebar = (examples = [], sortOrder) => {
+  if (sortOrder === 'alphabetical') {
+    return [...examples].sort((a, b) => exampleCollator.compare(a.name || '', b.name || ''));
+  }
+
+  if (sortOrder === 'reverseAlphabetical') {
+    return [...examples].sort((a, b) => -exampleCollator.compare(a.name || '', b.name || ''));
+  }
+
+  return examples;
+};
+
 export const humanizeRequestBodyMode = (mode) => {
   let label = 'No Body';
   switch (mode) {
