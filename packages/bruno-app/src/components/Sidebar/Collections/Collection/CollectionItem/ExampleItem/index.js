@@ -5,7 +5,7 @@ import {
   updateResponseExample,
   cloneResponseExample
 } from 'providers/ReduxStore/slices/collections';
-import { saveRequest } from 'providers/ReduxStore/slices/collections/actions';
+import { saveRequest, useResponseExampleInRequest } from 'providers/ReduxStore/slices/collections/actions';
 import { insertTaskIntoQueue } from 'providers/ReduxStore/slices/app';
 import { uuid } from 'utils/common';
 import { IconDots, IconEdit, IconCopy, IconTrash, IconCode } from '@tabler/icons';
@@ -20,6 +20,7 @@ import GenerateCodeItem from '../GenerateCodeItem';
 import toast from 'react-hot-toast';
 import StyledWrapper from './StyledWrapper';
 import { useSidebarAccordion } from 'components/Sidebar/SidebarAccordionContext';
+import { hasAnyExampleChanges, hasRequestTransportChanges } from 'utils/collections';
 
 const ExampleItem = ({ example, item, collection }) => {
   const { dropdownContainerRef } = useSidebarAccordion();
@@ -30,8 +31,11 @@ const ExampleItem = ({ example, item, collection }) => {
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [generateCodeItemModalOpen, setGenerateCodeItemModalOpen] = useState(false);
+  const [showReplaceRequestModal, setShowReplaceRequestModal] = useState(false);
+  const [sendAfterApplyingExample, setSendAfterApplyingExample] = useState(false);
   const exampleRef = useRef(null);
   const menuDropdownRef = useRef(null);
+  const replaceRequestModalOpenRef = useRef(false);
 
   // Calculate indentation: item depth + 1 for examples
   const indents = range((item.depth || 0) + 1);
@@ -118,6 +122,57 @@ const ExampleItem = ({ example, item, collection }) => {
     }
   };
 
+  const applyExampleToRequest = async (send = false) => {
+    const result = await dispatch(useResponseExampleInRequest({
+      itemUid: item.uid,
+      collectionUid: collection.uid,
+      exampleUid: example.uid,
+      send
+    }));
+
+    if (!result?.applied) {
+      if (result?.reason === 'unsaved-example-edits') {
+        toast.error('Save or cancel example edits before using an example.');
+      } else if (result?.reason === 'unsupported-example') {
+        toast.error('Only HTTP examples can be used in a request.');
+      } else if (result?.reason === 'not-applicable') {
+        toast.error('This example does not contain a request to use.');
+      } else if (result?.reason === 'busy') {
+        toast.error('This request is already being sent from an example.');
+      }
+      return;
+    }
+
+    if (send && !result.sent) {
+      if (!result.cancelled) {
+        toast.error('Request was not sent from example.');
+      }
+      return;
+    }
+
+    toast.success(send ? `Request sent from example "${example.name}"` : `Request filled from example "${example.name}"`);
+  };
+
+  const handleUseExample = (send = false) => {
+    if (item.type !== 'http-request' || example.type !== 'http-request') {
+      return;
+    }
+
+    if (hasAnyExampleChanges(item)) {
+      toast.error('Save or cancel example edits before using an example.');
+      return;
+    }
+
+    if (hasRequestTransportChanges(item)) {
+      replaceRequestModalOpenRef.current = true;
+      setSendAfterApplyingExample(send);
+      setShowReplaceRequestModal(true);
+      return;
+    }
+
+    applyExampleToRequest(send);
+  };
+
   const handleRenameConfirm = (newName) => {
     // Find the example index in the original examples array
     dispatch(updateResponseExample({
@@ -137,7 +192,18 @@ const ExampleItem = ({ example, item, collection }) => {
 
   // Build menu items for MenuDropdown
   const buildMenuItems = () => {
-    return [
+    const menuItems = [
+      ...(item.type === 'http-request' && example.type === 'http-request' ? [{
+        id: 'use-in-request',
+        label: 'Use in Request',
+        onClick: () => handleUseExample(),
+        testId: 'response-example-use-in-request-option'
+      }, {
+        id: 'use-and-send',
+        label: 'Use & Send',
+        onClick: () => handleUseExample(true),
+        testId: 'response-example-use-and-send-option'
+      }, { id: 'separator-use-example', type: 'divider' }] : []),
       {
         id: 'rename',
         leftSection: IconEdit,
@@ -169,6 +235,8 @@ const ExampleItem = ({ example, item, collection }) => {
         testId: 'response-example-delete-option'
       }
     ];
+
+    return menuItems;
   };
 
   // Handle right-click context menu
@@ -272,6 +340,34 @@ const ExampleItem = ({ example, item, collection }) => {
           isExample={true}
           exampleUid={example.uid}
         />
+      )}
+
+      {showReplaceRequestModal && (
+        <Modal
+          size="sm"
+          title="Replace request values?"
+          confirmText="Replace"
+          cancelText="Cancel"
+          closeModalFadeTimeout={0}
+          onCloseInitiated={() => {
+            replaceRequestModalOpenRef.current = false;
+          }}
+          handleCancel={() => {
+            replaceRequestModalOpenRef.current = false;
+            setShowReplaceRequestModal(false);
+          }}
+          handleConfirm={() => {
+            if (!replaceRequestModalOpenRef.current) {
+              return;
+            }
+            replaceRequestModalOpenRef.current = false;
+            setShowReplaceRequestModal(false);
+            applyExampleToRequest(sendAfterApplyingExample);
+          }}
+          dataTestId="replace-request-from-example-modal"
+        >
+          <p>Your unsaved method, URL, parameters, headers, and body will be replaced by this example.</p>
+        </Modal>
       )}
     </StyledWrapper>
   );

@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
 import { useDispatch } from 'react-redux';
 import IconEdit from 'components/Icons/IconEdit';
-import { IconCode, IconDeviceFloppy } from '@tabler/icons';
+import { IconChevronDown, IconCode, IconDeviceFloppy } from '@tabler/icons';
 import StyledWrapper from './StyledWrapper';
 import { useTheme } from 'providers/Theme';
 import TruncatedText from 'components/TruncatedText';
 import { updateResponseExampleName, updateResponseExampleDescription } from 'providers/ReduxStore/slices/collections';
 import get from 'lodash/get';
 import Button from 'ui/Button';
+import MenuDropdown from 'ui/MenuDropdown';
 
 const ResponseExampleTopBar = ({
   item,
@@ -17,7 +18,9 @@ const ResponseExampleTopBar = ({
   onEditToggle,
   onSave,
   onCancel,
-  onGenerateCode
+  onGenerateCode,
+  onTryExample,
+  onUseAndSend
 }) => {
   const { theme } = useTheme();
   const dispatch = useDispatch();
@@ -180,6 +183,38 @@ const ResponseExampleTopBar = ({
           </div>
 
           <div className="flex items-center gap-3 flex-shrink-0 md:w-auto w-full md:justify-end">
+            {item?.type === 'http-request' && example?.type === 'http-request' && onTryExample && (
+              <div className="flex items-center gap-1">
+                <Button
+                  color="secondary"
+                  size="sm"
+                  onClick={onTryExample}
+                  data-testid="response-example-use-in-request-btn"
+                >
+                  Use in Request
+                </Button>
+                {onUseAndSend && (
+                  <MenuDropdown
+                    items={[{
+                      id: 'use-and-send',
+                      label: 'Use & Send',
+                      onClick: onUseAndSend,
+                      testId: 'response-example-use-and-send-option'
+                    }]}
+                    placement="bottom-end"
+                    data-testid="response-example-use-actions-menu"
+                  >
+                    <Button
+                      color="secondary"
+                      size="sm"
+                      icon={<IconChevronDown size={14} />}
+                      aria-label="More use actions"
+                      data-testid="response-example-use-actions-menu-trigger"
+                    />
+                  </MenuDropdown>
+                )}
+              </div>
+            )}
             <Button
               color="secondary"
               size="sm"

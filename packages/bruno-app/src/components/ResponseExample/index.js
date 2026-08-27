@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import toast from 'react-hot-toast';
 import { updateRequestPaneTabWidth, clearOpenInEditMode } from 'providers/ReduxStore/slices/tabs';
-import { saveRequest } from 'providers/ReduxStore/slices/collections/actions';
+import { saveRequest, useResponseExampleInRequest } from 'providers/ReduxStore/slices/collections/actions';
 import { cancelResponseExampleEdit } from 'providers/ReduxStore/slices/collections';
+import Modal from 'components/Modal';
+import { hasAnyExampleChanges, hasRequestTransportChanges } from 'utils/collections';
 import ResponseExampleTopBar from './ResponseExampleTopBar';
 import ResponseExampleRequestPane from './ResponseExampleRequestPane';
 import ResponseExampleResponsePane from './ResponseExampleResponsePane';
@@ -13,7 +16,6 @@ const MIN_LEFT_PANE_WIDTH = 300;
 const MIN_RIGHT_PANE_WIDTH = 350;
 const MIN_TOP_PANE_HEIGHT = 150;
 const MIN_BOTTOM_PANE_HEIGHT = 150;
-
 const ResponseExample = ({ item, collection, example, openInEditMode }) => {
   const dispatch = useDispatch();
   const preferences = useSelector((state) => state.app.preferences);
@@ -29,8 +31,11 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
   // JSON examples (default content '{}') or on saved examples with a legitimately empty body.
   const [editMode, setEditMode] = useState(!!openInEditMode);
   const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
+  const [showReplaceRequestModal, setShowReplaceRequestModal] = useState(false);
+  const [sendAfterApplyingExample, setSendAfterApplyingExample] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const mainSectionRef = useRef(null);
+  const replaceRequestModalOpenRef = useRef(false);
 
   // Consume the one-shot flag so remounts (tab switch) don't re-enter edit mode.
   useEffect(() => {
@@ -129,8 +134,55 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
     setShowGenerateCodeModal(false);
   };
 
-  const handleTryExample = (example) => {
-    // TODO: Implement try example functionality
+  const applyExampleToRequest = async (send = false) => {
+    const result = await dispatch(useResponseExampleInRequest({
+      itemUid: item.uid,
+      collectionUid: collection.uid,
+      exampleUid: example.uid,
+      send
+    }));
+
+    if (!result?.applied) {
+      if (result?.reason === 'unsaved-example-edits') {
+        toast.error('Save or cancel example edits before using an example.');
+      } else if (result?.reason === 'unsupported-example') {
+        toast.error('Only HTTP examples can be used in a request.');
+      } else if (result?.reason === 'not-applicable') {
+        toast.error('This example does not contain a request to use.');
+      } else if (result?.reason === 'busy') {
+        toast.error('This request is already being sent from an example.');
+      }
+      return;
+    }
+
+    if (send && !result.sent) {
+      if (!result.cancelled) {
+        toast.error('Request was not sent from example.');
+      }
+      return;
+    }
+
+    toast.success(send ? `Request sent from example "${example.name}"` : `Request filled from example "${example.name}"`);
+  };
+
+  const handleUseExample = (send = false) => {
+    if (item?.type !== 'http-request' || !item?.uid || !collection?.uid || !example?.uid) {
+      return;
+    }
+
+    if (hasAnyExampleChanges(item)) {
+      toast.error('Save or cancel example edits before using an example.');
+      return;
+    }
+
+    if (hasRequestTransportChanges(item)) {
+      replaceRequestModalOpenRef.current = true;
+      setSendAfterApplyingExample(send);
+      setShowReplaceRequestModal(true);
+      return;
+    }
+
+    applyExampleToRequest(send);
   };
 
   // Update width when screen width or sidebar width changes
@@ -176,7 +228,8 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
           onSave={handleSave}
           onCancel={handleCancel}
           onGenerateCode={handleGenerateCode}
-          onTryExample={handleTryExample}
+          onTryExample={item?.type === 'http-request' && example?.type === 'http-request' ? () => handleUseExample() : undefined}
+          onUseAndSend={item?.type === 'http-request' && example?.type === 'http-request' ? () => handleUseExample(true) : undefined}
         />
         <section ref={mainSectionRef} className={`main wrapper flex mt-4 ${isVerticalLayout ? 'flex-col' : ''} flex-grow pb-4 relative overflow-auto scrollbar-hover`}>
           <section className="request-pane" data-testid="request-pane">
@@ -226,6 +279,34 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
           isExample={true}
           exampleUid={example.uid}
         />
+      )}
+
+      {showReplaceRequestModal && (
+        <Modal
+          size="sm"
+          title="Replace request values?"
+          confirmText="Replace"
+          cancelText="Cancel"
+          closeModalFadeTimeout={0}
+          onCloseInitiated={() => {
+            replaceRequestModalOpenRef.current = false;
+          }}
+          handleCancel={() => {
+            replaceRequestModalOpenRef.current = false;
+            setShowReplaceRequestModal(false);
+          }}
+          handleConfirm={() => {
+            if (!replaceRequestModalOpenRef.current) {
+              return;
+            }
+            replaceRequestModalOpenRef.current = false;
+            setShowReplaceRequestModal(false);
+            applyExampleToRequest(sendAfterApplyingExample);
+          }}
+          dataTestId="replace-request-from-example-modal"
+        >
+          <p>Your unsaved method, URL, parameters, headers, and body will be replaced by this example.</p>
+        </Modal>
       )}
     </>
   );

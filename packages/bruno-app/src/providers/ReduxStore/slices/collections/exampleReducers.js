@@ -9,6 +9,57 @@ import { findItemForExampleEditor,
 import { parsePathParams, splitOnFirst } from 'utils/url';
 import statusCodePhraseMap from 'components/ResponsePane/StatusCode/get-status-code-phrase';
 
+const cloneRequestRowsWithNewUids = (rows) => {
+  if (!Array.isArray(rows)) {
+    return cloneDeep(rows);
+  }
+
+  return rows.map((row) => ({
+    ...cloneDeep(row),
+    uid: uuid()
+  }));
+};
+
+const cloneExampleTransportRequest = (request = {}) => {
+  const body = cloneDeep(request.body);
+
+  if (body) {
+    ['formUrlEncoded', 'multipartForm', 'file'].forEach((field) => {
+      if (Array.isArray(body[field])) {
+        body[field] = cloneRequestRowsWithNewUids(body[field]);
+      }
+    });
+  }
+
+  return {
+    method: request.method,
+    url: request.url,
+    headers: cloneRequestRowsWithNewUids(request.headers),
+    params: cloneRequestRowsWithNewUids(request.params),
+    body
+  };
+};
+
+export const applyResponseExampleToRequest = (state, action) => {
+  const { itemUid, collectionUid, exampleUid } = action.payload;
+  const item = findItemForExampleEditor(state, collectionUid, itemUid);
+
+  if (!item || item.type !== 'http-request') return;
+
+  const examples = item.draft?.examples || item.examples || [];
+  const example = examples.find((entry) => entry.uid === exampleUid);
+  if (!example?.request || example.type !== 'http-request') return;
+
+  if (!item.draft) {
+    item.draft = cloneDeep(item);
+  }
+
+  item.draft.request = {
+    ...item.draft.request,
+    ...cloneExampleTransportRequest(example.request)
+  };
+};
+
 export const addResponseExample = (state, action) => {
   const { itemUid, collectionUid, example } = action.payload;
   const item = findItemForExampleEditor(state, collectionUid, itemUid);

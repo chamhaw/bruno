@@ -93,6 +93,7 @@ const Modal = ({
   hideFooter,
   hideClose,
   footerLeft,
+  onCloseInitiated,
   disableCloseOnOutsideClick,
   disableEscapeKey,
   onClick,
@@ -131,6 +132,7 @@ const Modal = ({
   useFocusTrap(modalRef);
 
   const closeModal = (args) => {
+    onCloseInitiated?.(args);
     setIsClosing(true);
     setTimeout(() => handleCancel(args), closeModalFadeTimeout);
   };

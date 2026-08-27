@@ -4163,6 +4163,7 @@ export const collectionsSlice = createSlice({
       state.saveTransientRequestModals = [];
     },
     /* Response Example Actions */
+    applyResponseExampleToRequest: exampleReducers.applyResponseExampleToRequest,
     addResponseExample: exampleReducers.addResponseExample,
     cloneResponseExample: exampleReducers.cloneResponseExample,
     updateResponseExample: exampleReducers.updateResponseExample,
@@ -4390,6 +4391,7 @@ export const {
   setLastClickedSidebarUid,
 
   /* Response Example Actions - Start */
+  applyResponseExampleToRequest,
   addResponseExample,
   cloneResponseExample,
   updateResponseExample,

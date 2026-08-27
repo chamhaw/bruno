@@ -1221,6 +1221,34 @@ export const hasExampleChanges = (_item, exampleUid) => {
   return !isEqual(originalExample, draftExample);
 };
 
+export const hasAnyExampleChanges = (item) => {
+  if (!item?.draft) {
+    return false;
+  }
+
+  const savedExamples = item.examples || [];
+  const draftExamples = item.draft.examples || [];
+
+  if (savedExamples.length !== draftExamples.length) {
+    return true;
+  }
+
+  return savedExamples.some((example) => (
+    !draftExamples.some((draftExample) => draftExample.uid === example.uid)
+    || hasExampleChanges(item, example.uid)
+  ));
+};
+
+export const hasRequestTransportChanges = (item) => {
+  if (!item?.draft) {
+    return false;
+  }
+
+  return ['method', 'url', 'headers', 'params', 'body'].some((field) => (
+    !isEqual(item.draft.request?.[field], item.request?.[field])
+  ));
+};
+
 export const getDefaultRequestPaneTab = (item) => {
   if (item.type === 'http-request') {
     // If no params are enabled and body mode is set, default to 'body' tab

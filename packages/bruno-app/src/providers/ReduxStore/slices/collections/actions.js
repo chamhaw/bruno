@@ -22,6 +22,7 @@ import {
   refreshUidsInItem,
   isItemARequest,
   getAllVariables,
+  hasAnyExampleChanges,
   transformRequestToSaveToFilesystem,
   transformCollectionRootToSave,
   resolveEnabledVariable,
@@ -75,6 +76,7 @@ import {
   _clearScriptCollectionBaselines,
   addTransientDirectory,
   addSaveTransientRequestModal,
+  applyResponseExampleToRequest,
   updatePathParam,
   toggleCollection,
   setSidebarSelection
@@ -121,6 +123,8 @@ import {
 // Display name for a cloned/pasted item: always "<source> copy" (semantic).
 // Filename uniqueness is resolved silently by the electron main process
 const copyDisplayName = (originalName) => `${originalName} copy`;
+
+const responseExampleSendsInFlight = new Set();
 
 export const renameCollection = (newName, collectionUid) => (dispatch, getState) => {
   const state = getState();
@@ -605,7 +609,7 @@ const extractPromptVariablesForRequest = async (item, collection) => {
   });
 };
 
-export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
+export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) => (dispatch, getState) => {
   const state = getState();
   const { globalEnvironments, activeGlobalEnvironmentUid } = state.globalEnvironments;
   const collection = findCollectionByUid(state.collections.collections, collectionUid);
@@ -639,7 +643,7 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
       collectionCopy.promptVariables = promptVariables ?? {};
     } catch (error) {
       if (error === 'cancelled') {
-        return resolve(); // Resolve without error if user cancels prompt
+        return resolve(returnStatus ? { sent: false, cancelled: true } : undefined);
       }
       return reject(error);
     }
@@ -662,17 +666,23 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
     const isWsRequest = itemCopy.type === 'ws-request';
     if (isGrpcRequest) {
       sendGrpcRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables)
-        .then(resolve)
+        .then((result) => resolve(returnStatus ? { sent: true } : result))
         .catch((err) => {
           toast.error(err.message);
+          if (returnStatus) {
+            resolve({ sent: false, error: err });
+          }
         });
     } else if (isWsRequest) {
       const wsMessages = itemCopy.draft?.request?.body?.ws || itemCopy.request?.body?.ws || [];
       const wsSelectedMessageIndex = Math.max(0, wsMessages.findIndex((msg) => msg.selected));
       sendWsRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables, wsSelectedMessageIndex)
-        .then(resolve)
+        .then((result) => resolve(returnStatus ? { sent: true } : result))
         .catch((err) => {
           toast.error(err.message);
+          if (returnStatus) {
+            resolve({ sent: false, error: err });
+          }
         });
     } else {
       sendNetworkRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables)
@@ -687,7 +697,7 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
             }))
           };
 
-          return dispatch(
+          const responseAction = dispatch(
             responseReceived({
               itemUid,
               collectionUid,
@@ -695,6 +705,7 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
               requestSent
             })
           );
+          return returnStatus ? { sent: true } : responseAction;
         })
         .then(resolve)
         .catch((err) => {
@@ -710,6 +721,9 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
                 requestSent
               })
             );
+            if (returnStatus) {
+              return resolve({ sent: false, cancelled: true });
+            }
             return;
           }
 
@@ -729,9 +743,65 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
               requestSent
             })
           );
+          if (returnStatus) {
+            return resolve({ sent: false, error: err });
+          }
         });
     }
   });
+};
+
+export const useResponseExampleInRequest = ({ itemUid, collectionUid, exampleUid, send = false }) => async (dispatch, getState) => {
+  const collection = findCollectionByUid(getState().collections.collections, collectionUid);
+  const item = collection ? findItemInCollection(collection, itemUid) : null;
+  const examples = item?.draft?.examples || item?.examples || [];
+  const example = examples.find((entry) => entry.uid === exampleUid);
+
+  if (!item || item.type !== 'http-request' || !example || example.type !== 'http-request') {
+    return { applied: false, reason: 'unsupported-example' };
+  }
+
+  if (!example.request || typeof example.request !== 'object') {
+    return { applied: false, reason: 'not-applicable' };
+  }
+
+  if (hasAnyExampleChanges(item)) {
+    return { applied: false, reason: 'unsaved-example-edits' };
+  }
+
+  const inFlightKey = `${collectionUid}:${itemUid}`;
+  if (send && responseExampleSendsInFlight.has(inFlightKey)) {
+    return { applied: false, reason: 'busy' };
+  }
+
+  if (send) {
+    responseExampleSendsInFlight.add(inFlightKey);
+  }
+
+  try {
+    dispatch(applyResponseExampleToRequest({ itemUid, collectionUid, exampleUid }));
+
+    const updatedCollection = findCollectionByUid(getState().collections.collections, collectionUid);
+    const updatedItem = updatedCollection ? findItemInCollection(updatedCollection, itemUid) : null;
+    if (!updatedItem) {
+      return { applied: false, reason: 'request-not-found' };
+    }
+
+    dispatch(addTab({
+      uid: updatedItem.uid,
+      collectionUid,
+      type: updatedItem.type,
+      pathname: updatedItem.pathname
+    }));
+
+    const sendResult = send ? await dispatch(sendRequest(updatedItem, collectionUid, { returnStatus: true })) : null;
+
+    return { applied: true, item: updatedItem, ...(sendResult || {}) };
+  } finally {
+    if (send) {
+      responseExampleSendsInFlight.delete(inFlightKey);
+    }
+  }
 };
 
 export const cancelRequest = (cancelTokenUid, item, collection) => (dispatch) => {
