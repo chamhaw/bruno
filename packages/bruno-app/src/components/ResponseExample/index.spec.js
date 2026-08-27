@@ -34,10 +34,9 @@ jest.mock('providers/ReduxStore/slices/collections', () => ({
 
 jest.mock('react-hot-toast', () => ({ success: jest.fn(), error: jest.fn() }));
 jest.mock('./StyledWrapper', () => ({ children }) => <div>{children}</div>);
-jest.mock('./ResponseExampleTopBar', () => ({ onTryExample, onUseAndSend }) => (
+jest.mock('./ResponseExampleTopBar', () => ({ onTryExample }) => (
   <>
-    <button type="button" onClick={onTryExample}>Use in Request</button>
-    <button type="button" onClick={onUseAndSend}>Use & Send</button>
+    <button type="button" onClick={onTryExample}>Try</button>
   </>
 ));
 jest.mock('./ResponseExampleRequestPane', () => () => <div />);
@@ -80,7 +79,7 @@ const renderExample = (item) => {
   );
 };
 
-describe('ResponseExample Use in Request', () => {
+describe('ResponseExample Try', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockDispatch.mockClear();
@@ -104,7 +103,7 @@ describe('ResponseExample Use in Request', () => {
     });
 
     renderExample(item);
-    fireEvent.click(screen.getByText('Use in Request'));
+    fireEvent.click(screen.getByText('Try'));
 
     expect(screen.getByTestId('replace-request-from-example-modal')).toBeInTheDocument();
     expect(mockUseResponseExampleInRequest).not.toHaveBeenCalled();
@@ -114,14 +113,13 @@ describe('ResponseExample Use in Request', () => {
     expect(mockUseResponseExampleInRequest).not.toHaveBeenCalled();
     act(() => jest.runOnlyPendingTimers());
 
-    fireEvent.click(screen.getByText('Use in Request'));
+    fireEvent.click(screen.getByText('Try'));
     fireEvent.click(screen.getByText('Replace'));
 
     expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith({
       collectionUid: 'collection-1',
       itemUid: 'request-1',
-      exampleUid: 'example-1',
-      send: false
+      exampleUid: 'example-1'
     });
   });
 
@@ -136,13 +134,17 @@ describe('ResponseExample Use in Request', () => {
     });
 
     renderExample(item);
-    fireEvent.click(screen.getByText('Use in Request'));
+    fireEvent.click(screen.getByText('Try'));
 
     expect(screen.queryByTestId('replace-request-from-example-modal')).not.toBeInTheDocument();
-    expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith(expect.objectContaining({ send: false }));
+    expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith({
+      collectionUid: 'collection-1',
+      itemUid: 'request-1',
+      exampleUid: 'example-1'
+    });
   });
 
-  it('blocks both actions while any example has unsaved edits', () => {
+  it('blocks Try while any example has unsaved edits', () => {
     const item = makeItem({
       method: 'GET',
       url: 'https://saved.example.test/users',
@@ -161,25 +163,9 @@ describe('ResponseExample Use in Request', () => {
     }];
 
     renderExample(item);
-    fireEvent.click(screen.getByText('Use in Request'));
-    fireEvent.click(screen.getByText('Use & Send'));
+    fireEvent.click(screen.getByText('Try'));
 
     expect(mockUseResponseExampleInRequest).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith('Save or cancel example edits before using an example.');
-  });
-
-  it('does not claim Use & Send succeeded when the prompt is cancelled', async () => {
-    mockUseResponseExampleInRequest.mockImplementation(() => async () => ({
-      applied: true,
-      sent: false,
-      cancelled: true
-    }));
-
-    renderExample(makeItem());
-    await act(async () => {
-      fireEvent.click(screen.getByText('Use & Send'));
-    });
-
-    expect(toast.success).not.toHaveBeenCalled();
   });
 });

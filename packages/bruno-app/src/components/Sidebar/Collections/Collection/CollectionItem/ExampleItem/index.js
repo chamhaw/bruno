@@ -13,7 +13,6 @@ import ExampleIcon from 'components/Icons/ExampleIcon';
 import range from 'lodash/range';
 import classnames from 'classnames';
 import MenuDropdown from 'ui/MenuDropdown';
-import ActionIcon from 'ui/ActionIcon';
 import Modal from 'components/Modal';
 import DeleteResponseExampleModal from './DeleteResponseExampleModal';
 import GenerateCodeItem from '../GenerateCodeItem';
@@ -32,7 +31,6 @@ const ExampleItem = ({ example, item, collection }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [generateCodeItemModalOpen, setGenerateCodeItemModalOpen] = useState(false);
   const [showReplaceRequestModal, setShowReplaceRequestModal] = useState(false);
-  const [sendAfterApplyingExample, setSendAfterApplyingExample] = useState(false);
   const exampleRef = useRef(null);
   const menuDropdownRef = useRef(null);
   const replaceRequestModalOpenRef = useRef(false);
@@ -122,12 +120,11 @@ const ExampleItem = ({ example, item, collection }) => {
     }
   };
 
-  const applyExampleToRequest = async (send = false) => {
+  const applyExampleToRequest = async () => {
     const result = await dispatch(useResponseExampleInRequest({
       itemUid: item.uid,
       collectionUid: collection.uid,
-      exampleUid: example.uid,
-      send
+      exampleUid: example.uid
     }));
 
     if (!result?.applied) {
@@ -137,23 +134,14 @@ const ExampleItem = ({ example, item, collection }) => {
         toast.error('Only HTTP examples can be used in a request.');
       } else if (result?.reason === 'not-applicable') {
         toast.error('This example does not contain a request to use.');
-      } else if (result?.reason === 'busy') {
-        toast.error('This request is already being sent from an example.');
       }
       return;
     }
 
-    if (send && !result.sent) {
-      if (!result.cancelled) {
-        toast.error('Request was not sent from example.');
-      }
-      return;
-    }
-
-    toast.success(send ? `Request sent from example "${example.name}"` : `Request filled from example "${example.name}"`);
+    toast.success(`Request filled from example "${example.name}"`);
   };
 
-  const handleUseExample = (send = false) => {
+  const handleTryExample = () => {
     if (item.type !== 'http-request' || example.type !== 'http-request') {
       return;
     }
@@ -165,12 +153,11 @@ const ExampleItem = ({ example, item, collection }) => {
 
     if (hasRequestTransportChanges(item)) {
       replaceRequestModalOpenRef.current = true;
-      setSendAfterApplyingExample(send);
       setShowReplaceRequestModal(true);
       return;
     }
 
-    applyExampleToRequest(send);
+    applyExampleToRequest();
   };
 
   const handleRenameConfirm = (newName) => {
@@ -194,15 +181,10 @@ const ExampleItem = ({ example, item, collection }) => {
   const buildMenuItems = () => {
     const menuItems = [
       ...(item.type === 'http-request' && example.type === 'http-request' ? [{
-        id: 'use-in-request',
-        label: 'Use in Request',
-        onClick: () => handleUseExample(),
-        testId: 'response-example-use-in-request-option'
-      }, {
-        id: 'use-and-send',
-        label: 'Use & Send',
-        onClick: () => handleUseExample(true),
-        testId: 'response-example-use-and-send-option'
+        id: 'try',
+        label: 'Try',
+        onClick: handleTryExample,
+        testId: 'response-example-try-option'
       }, { id: 'separator-use-example', type: 'divider' }] : []),
       {
         id: 'rename',
@@ -362,7 +344,7 @@ const ExampleItem = ({ example, item, collection }) => {
             }
             replaceRequestModalOpenRef.current = false;
             setShowReplaceRequestModal(false);
-            applyExampleToRequest(sendAfterApplyingExample);
+            applyExampleToRequest();
           }}
           dataTestId="replace-request-from-example-modal"
         >

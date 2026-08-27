@@ -32,7 +32,6 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
   const [editMode, setEditMode] = useState(!!openInEditMode);
   const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
   const [showReplaceRequestModal, setShowReplaceRequestModal] = useState(false);
-  const [sendAfterApplyingExample, setSendAfterApplyingExample] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const mainSectionRef = useRef(null);
   const replaceRequestModalOpenRef = useRef(false);
@@ -134,12 +133,11 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
     setShowGenerateCodeModal(false);
   };
 
-  const applyExampleToRequest = async (send = false) => {
+  const applyExampleToRequest = async () => {
     const result = await dispatch(useResponseExampleInRequest({
       itemUid: item.uid,
       collectionUid: collection.uid,
-      exampleUid: example.uid,
-      send
+      exampleUid: example.uid
     }));
 
     if (!result?.applied) {
@@ -149,23 +147,14 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
         toast.error('Only HTTP examples can be used in a request.');
       } else if (result?.reason === 'not-applicable') {
         toast.error('This example does not contain a request to use.');
-      } else if (result?.reason === 'busy') {
-        toast.error('This request is already being sent from an example.');
       }
       return;
     }
 
-    if (send && !result.sent) {
-      if (!result.cancelled) {
-        toast.error('Request was not sent from example.');
-      }
-      return;
-    }
-
-    toast.success(send ? `Request sent from example "${example.name}"` : `Request filled from example "${example.name}"`);
+    toast.success(`Request filled from example "${example.name}"`);
   };
 
-  const handleUseExample = (send = false) => {
+  const handleTryExample = () => {
     if (item?.type !== 'http-request' || !item?.uid || !collection?.uid || !example?.uid) {
       return;
     }
@@ -177,12 +166,11 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
 
     if (hasRequestTransportChanges(item)) {
       replaceRequestModalOpenRef.current = true;
-      setSendAfterApplyingExample(send);
       setShowReplaceRequestModal(true);
       return;
     }
 
-    applyExampleToRequest(send);
+    applyExampleToRequest();
   };
 
   // Update width when screen width or sidebar width changes
@@ -228,8 +216,7 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
           onSave={handleSave}
           onCancel={handleCancel}
           onGenerateCode={handleGenerateCode}
-          onTryExample={item?.type === 'http-request' && example?.type === 'http-request' ? () => handleUseExample() : undefined}
-          onUseAndSend={item?.type === 'http-request' && example?.type === 'http-request' ? () => handleUseExample(true) : undefined}
+          onTryExample={item?.type === 'http-request' && example?.type === 'http-request' ? handleTryExample : undefined}
         />
         <section ref={mainSectionRef} className={`main wrapper flex mt-4 ${isVerticalLayout ? 'flex-col' : ''} flex-grow pb-4 relative overflow-auto scrollbar-hover`}>
           <section className="request-pane" data-testid="request-pane">
@@ -301,7 +288,7 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
             }
             replaceRequestModalOpenRef.current = false;
             setShowReplaceRequestModal(false);
-            applyExampleToRequest(sendAfterApplyingExample);
+            applyExampleToRequest();
           }}
           dataTestId="replace-request-from-example-modal"
         >

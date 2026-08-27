@@ -88,48 +88,28 @@ const createStoreHarness = (initialState) => {
 
 describe('useResponseExampleInRequest', () => {
   beforeEach(() => {
-    window.promptForVariables = jest.fn().mockResolvedValue({});
-    sendNetworkRequest.mockResolvedValue({
-      requestSent: { method: 'POST', url: 'https://example.test/users' },
-      status: 201,
-      statusText: 'Created',
-      headers: [],
-      body: '{"id":1}'
-    });
+    sendNetworkRequest.mockReset();
   });
 
-  it('sends the parent request read after applying the example instead of a stale pre-apply item', async () => {
+  it('applies the snapshot without sending and focuses the parent request tab', async () => {
     const { dispatch, getState } = createStoreHarness(makeState());
 
     const result = await dispatch(useResponseExampleInRequest({
       collectionUid,
       itemUid,
-      exampleUid,
-      send: true
+      exampleUid
     }));
 
     expect(result.applied).toBe(true);
-    expect(sendNetworkRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uid: itemUid,
-        draft: expect.objectContaining({
-          request: expect.objectContaining({
-            method: 'POST',
-            url: 'https://example.test/users',
-            body: { mode: 'json', json: '{"name":"Ada"}' },
-            auth: { mode: 'bearer', token: 'parent-token' }
-          })
-        })
-      }),
-      expect.any(Object),
-      undefined,
-      expect.any(Object)
-    );
+    expect(sendNetworkRequest).not.toHaveBeenCalled();
     expect(getState().tabs.activeTabUid).toBe(itemUid);
-    expect(getState().collections.collections[0].items[0].response).toMatchObject({ status: 201 });
+    expect(getState().collections.collections[0].items[0]).toMatchObject({
+      request: { method: 'GET', url: 'https://saved.example.test/users' },
+      draft: { request: { method: 'POST', url: 'https://example.test/users' } }
+    });
   });
 
-  it('uses an example without saving or sending when send is false', async () => {
+  it('does not persist the parent request while trying an example', async () => {
     const { dispatch, getState } = createStoreHarness(makeState());
 
     const result = await dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid }));
@@ -161,48 +141,10 @@ describe('useResponseExampleInRequest', () => {
     item.examples[0] = { ...item.examples[0], request: undefined };
     const { dispatch, getState } = createStoreHarness(makeState(item));
 
-    const result = await dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: true }));
+    const result = await dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid }));
 
     expect(result).toEqual({ applied: false, reason: 'not-applicable' });
     expect(sendNetworkRequest).not.toHaveBeenCalled();
     expect(getState().collections.collections[0].items[0].draft).toBeUndefined();
-  });
-
-  it('keeps one Use & Send in flight through prompt cancellation while ordinary Use remains available', async () => {
-    const item = makeItem();
-    item.examples[0].request.url = 'https://example.test/users/{{?token}}';
-    let cancelPrompt;
-    window.promptForVariables = jest.fn(() => new Promise((resolve, reject) => {
-      cancelPrompt = reject;
-    }));
-    const { dispatch } = createStoreHarness(makeState(item));
-
-    const firstSend = dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: true }));
-    await Promise.resolve();
-    expect(window.promptForVariables).toHaveBeenCalledTimes(1);
-
-    await expect(dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: true })))
-      .resolves.toEqual({ applied: false, reason: 'busy' });
-    await expect(dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: false })))
-      .resolves.toMatchObject({ applied: true });
-
-    cancelPrompt('cancelled');
-    await expect(firstSend).resolves.toMatchObject({ applied: true, sent: false, cancelled: true });
-    expect(sendNetworkRequest).not.toHaveBeenCalled();
-
-    window.promptForVariables = jest.fn().mockResolvedValue({ token: 'fresh-token' });
-    await expect(dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: true })))
-      .resolves.toMatchObject({ applied: true, sent: true });
-  });
-
-  it('releases the Use & Send guard after a send failure', async () => {
-    sendNetworkRequest.mockRejectedValueOnce(new Error('network unavailable'));
-    const { dispatch } = createStoreHarness(makeState());
-
-    await expect(dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: true })))
-      .resolves.toMatchObject({ applied: true, sent: false });
-
-    await expect(dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid, send: true })))
-      .resolves.toMatchObject({ applied: true, sent: true });
   });
 });

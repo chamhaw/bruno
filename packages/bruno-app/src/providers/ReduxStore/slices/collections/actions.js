@@ -124,8 +124,6 @@ import {
 // Filename uniqueness is resolved silently by the electron main process
 const copyDisplayName = (originalName) => `${originalName} copy`;
 
-const responseExampleSendsInFlight = new Set();
-
 export const renameCollection = (newName, collectionUid) => (dispatch, getState) => {
   const state = getState();
   const collection = findCollectionByUid(state.collections.collections, collectionUid);
@@ -609,7 +607,7 @@ const extractPromptVariablesForRequest = async (item, collection) => {
   });
 };
 
-export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) => (dispatch, getState) => {
+export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
   const state = getState();
   const { globalEnvironments, activeGlobalEnvironmentUid } = state.globalEnvironments;
   const collection = findCollectionByUid(state.collections.collections, collectionUid);
@@ -643,7 +641,7 @@ export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) 
       collectionCopy.promptVariables = promptVariables ?? {};
     } catch (error) {
       if (error === 'cancelled') {
-        return resolve(returnStatus ? { sent: false, cancelled: true } : undefined);
+        return resolve(); // Resolve without error if user cancels prompt
       }
       return reject(error);
     }
@@ -666,23 +664,17 @@ export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) 
     const isWsRequest = itemCopy.type === 'ws-request';
     if (isGrpcRequest) {
       sendGrpcRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables)
-        .then((result) => resolve(returnStatus ? { sent: true } : result))
+        .then(resolve)
         .catch((err) => {
           toast.error(err.message);
-          if (returnStatus) {
-            resolve({ sent: false, error: err });
-          }
         });
     } else if (isWsRequest) {
       const wsMessages = itemCopy.draft?.request?.body?.ws || itemCopy.request?.body?.ws || [];
       const wsSelectedMessageIndex = Math.max(0, wsMessages.findIndex((msg) => msg.selected));
       sendWsRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables, wsSelectedMessageIndex)
-        .then((result) => resolve(returnStatus ? { sent: true } : result))
+        .then(resolve)
         .catch((err) => {
           toast.error(err.message);
-          if (returnStatus) {
-            resolve({ sent: false, error: err });
-          }
         });
     } else {
       sendNetworkRequest(itemCopy, collectionCopy, environment, collectionCopy.runtimeVariables)
@@ -697,7 +689,7 @@ export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) 
             }))
           };
 
-          const responseAction = dispatch(
+          return dispatch(
             responseReceived({
               itemUid,
               collectionUid,
@@ -705,7 +697,6 @@ export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) 
               requestSent
             })
           );
-          return returnStatus ? { sent: true } : responseAction;
         })
         .then(resolve)
         .catch((err) => {
@@ -721,9 +712,6 @@ export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) 
                 requestSent
               })
             );
-            if (returnStatus) {
-              return resolve({ sent: false, cancelled: true });
-            }
             return;
           }
 
@@ -743,15 +731,12 @@ export const sendRequest = (item, collectionUid, { returnStatus = false } = {}) 
               requestSent
             })
           );
-          if (returnStatus) {
-            return resolve({ sent: false, error: err });
-          }
         });
     }
   });
 };
 
-export const useResponseExampleInRequest = ({ itemUid, collectionUid, exampleUid, send = false }) => async (dispatch, getState) => {
+export const useResponseExampleInRequest = ({ itemUid, collectionUid, exampleUid }) => (dispatch, getState) => {
   const collection = findCollectionByUid(getState().collections.collections, collectionUid);
   const item = collection ? findItemInCollection(collection, itemUid) : null;
   const examples = item?.draft?.examples || item?.examples || [];
@@ -769,39 +754,22 @@ export const useResponseExampleInRequest = ({ itemUid, collectionUid, exampleUid
     return { applied: false, reason: 'unsaved-example-edits' };
   }
 
-  const inFlightKey = `${collectionUid}:${itemUid}`;
-  if (send && responseExampleSendsInFlight.has(inFlightKey)) {
-    return { applied: false, reason: 'busy' };
+  dispatch(applyResponseExampleToRequest({ itemUid, collectionUid, exampleUid }));
+
+  const updatedCollection = findCollectionByUid(getState().collections.collections, collectionUid);
+  const updatedItem = updatedCollection ? findItemInCollection(updatedCollection, itemUid) : null;
+  if (!updatedItem) {
+    return { applied: false, reason: 'request-not-found' };
   }
 
-  if (send) {
-    responseExampleSendsInFlight.add(inFlightKey);
-  }
+  dispatch(addTab({
+    uid: updatedItem.uid,
+    collectionUid,
+    type: updatedItem.type,
+    pathname: updatedItem.pathname
+  }));
 
-  try {
-    dispatch(applyResponseExampleToRequest({ itemUid, collectionUid, exampleUid }));
-
-    const updatedCollection = findCollectionByUid(getState().collections.collections, collectionUid);
-    const updatedItem = updatedCollection ? findItemInCollection(updatedCollection, itemUid) : null;
-    if (!updatedItem) {
-      return { applied: false, reason: 'request-not-found' };
-    }
-
-    dispatch(addTab({
-      uid: updatedItem.uid,
-      collectionUid,
-      type: updatedItem.type,
-      pathname: updatedItem.pathname
-    }));
-
-    const sendResult = send ? await dispatch(sendRequest(updatedItem, collectionUid, { returnStatus: true })) : null;
-
-    return { applied: true, item: updatedItem, ...(sendResult || {}) };
-  } finally {
-    if (send) {
-      responseExampleSendsInFlight.delete(inFlightKey);
-    }
-  }
+  return { applied: true, item: updatedItem };
 };
 
 export const cancelRequest = (cancelTokenUid, item, collection) => (dispatch) => {

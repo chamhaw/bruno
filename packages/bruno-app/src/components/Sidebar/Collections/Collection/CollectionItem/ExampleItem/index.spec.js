@@ -57,23 +57,20 @@ describe('ExampleItem', () => {
     mockDispatch.mockImplementation((action) => (typeof action === 'function' ? action(mockDispatch) : action));
   });
 
-  it('adds Use in Request and Use & Send to an HTTP example context menu only', () => {
+  it('adds Try to an HTTP example context menu only', () => {
     const { rerender } = render(<ExampleItem item={item} collection={collection} example={example} />);
 
-    expect(screen.getByTestId('response-example-use-in-request-option')).toBeInTheDocument();
-    expect(screen.getByTestId('response-example-use-and-send-option')).toBeInTheDocument();
+    expect(screen.getByTestId('response-example-try-option')).toHaveTextContent('Try');
 
-    fireEvent.click(screen.getByTestId('response-example-use-in-request-option'));
+    fireEvent.click(screen.getByTestId('response-example-try-option'));
     expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith({
       itemUid: 'request-1',
       collectionUid: 'collection-1',
-      exampleUid: 'example-1',
-      send: false
+      exampleUid: 'example-1'
     });
 
     rerender(<ExampleItem item={{ ...item, type: 'grpc-request' }} collection={collection} example={example} />);
 
-    expect(screen.queryByTestId('response-example-use-in-request-option')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('response-example-use-and-send-option')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('response-example-try-option')).not.toBeInTheDocument();
   });
 });
