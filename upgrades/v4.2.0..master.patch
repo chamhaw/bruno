@@ -1,0 +1,3232 @@
+diff --git a/packages/bruno-app/src/components/Modal/index.js b/packages/bruno-app/src/components/Modal/index.js
+index 64b05c314..57076458b 100644
+--- a/packages/bruno-app/src/components/Modal/index.js
++++ b/packages/bruno-app/src/components/Modal/index.js
+@@ -93,6 +93,7 @@ const Modal = ({
+   hideFooter,
+   hideClose,
+   footerLeft,
++  onCloseInitiated,
+   disableCloseOnOutsideClick,
+   disableEscapeKey,
+   onClick,
+@@ -131,6 +132,7 @@ const Modal = ({
+   useFocusTrap(modalRef);
+ 
+   const closeModal = (args) => {
++    onCloseInitiated?.(args);
+     setIsClosing(true);
+     setTimeout(() => handleCancel(args), closeModalFadeTimeout);
+   };
+diff --git a/packages/bruno-app/src/components/OpenAPISyncTab/ConnectSpecForm/index.js b/packages/bruno-app/src/components/OpenAPISyncTab/ConnectSpecForm/index.js
+index ee8f395f3..9de2079f5 100644
+--- a/packages/bruno-app/src/components/OpenAPISyncTab/ConnectSpecForm/index.js
++++ b/packages/bruno-app/src/components/OpenAPISyncTab/ConnectSpecForm/index.js
+@@ -77,11 +77,7 @@ const ConnectSpecForm = ({ sourceUrl, setSourceUrl, isLoading, error, setError,
+                   try {
+                     const data = await parseFileAsJsonOrYaml(file);
+                     if (!isOpenApiSpec(data)) {
+-                      setError('The selected file is not a valid OpenAPI 3.x specification');
+-                      return;
+-                    }
+-                    if (data.swagger && String(data.swagger).startsWith('2')) {
+-                      setError('Swagger 2.0 is not supported. Please convert your spec to OpenAPI 3.x.');
++                      setError('The selected file is not a valid OpenAPI or Swagger specification');
+                       return;
+                     }
+                     const filePath = window.ipcRenderer.getFilePath(file);
+@@ -112,7 +108,7 @@ const ConnectSpecForm = ({ sourceUrl, setSourceUrl, isLoading, error, setError,
+         </div>
+         <p className="setup-hint">
+           {mode === 'url'
+-            ? 'Supports OpenAPI 3.x specifications in JSON or YAML format'
++            ? 'Supports OpenAPI 3.x and Swagger 2.0 specifications in JSON or YAML format'
+             : 'Select a local OpenAPI/Swagger JSON or YAML file'}
+         </p>
+         {error && (
+diff --git a/packages/bruno-app/src/components/OpenAPISyncTab/ConnectionSettingsModal/index.js b/packages/bruno-app/src/components/OpenAPISyncTab/ConnectionSettingsModal/index.js
+index 7be88793b..d8cc8813d 100644
+--- a/packages/bruno-app/src/components/OpenAPISyncTab/ConnectionSettingsModal/index.js
++++ b/packages/bruno-app/src/components/OpenAPISyncTab/ConnectionSettingsModal/index.js
+@@ -85,7 +85,7 @@ const ConnectionSettingsModal = ({ collection, sourceUrl, onSave, onDisconnect,
+                       try {
+                         const data = await parseFileAsJsonOrYaml(file);
+                         if (!isOpenApiSpec(data)) {
+-                          toast.error('The selected file is not a valid OpenAPI 3.x specification');
++                          toast.error('The selected file is not a valid OpenAPI or Swagger specification');
+                           return;
+                         }
+                         const path = window.ipcRenderer.getFilePath(file);
+diff --git a/packages/bruno-app/src/components/OpenAPISyncTab/hooks/useOpenAPISync.js b/packages/bruno-app/src/components/OpenAPISyncTab/hooks/useOpenAPISync.js
+index 082085246..c381bfd53 100644
+--- a/packages/bruno-app/src/components/OpenAPISyncTab/hooks/useOpenAPISync.js
++++ b/packages/bruno-app/src/components/OpenAPISyncTab/hooks/useOpenAPISync.js
+@@ -229,11 +229,11 @@ const useOpenAPISync = (collection) => {
+         try {
+           const { specType } = await fetchAndValidateApiSpecFromUrl({ url: trimmedUrl });
+           if (specType !== 'openapi') {
+-            setError('The URL does not point to a valid OpenAPI 3.x specification');
++            setError('The URL does not point to a valid OpenAPI or Swagger specification');
+             return;
+           }
+         } catch {
+-          setError('The URL does not point to a valid OpenAPI 3.x specification');
++          setError('The URL does not point to a valid OpenAPI or Swagger specification');
+           return;
+         }
+       }
+@@ -362,11 +362,11 @@ const useOpenAPISync = (collection) => {
+       try {
+         ({ specType } = await fetchAndValidateApiSpecFromUrl({ url: newUrl }));
+       } catch {
+-        toast.error('The URL does not point to a valid OpenAPI 3.x specification');
++        toast.error('The URL does not point to a valid OpenAPI or Swagger specification');
+         throw new Error('Invalid OpenAPI specification');
+       }
+       if (specType !== 'openapi') {
+-        toast.error('The URL does not point to a valid OpenAPI 3.x specification');
++        toast.error('The URL does not point to a valid OpenAPI or Swagger specification');
+         throw new Error('Invalid OpenAPI specification');
+       }
+     }
+diff --git a/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.js b/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.js
+index 962d8f239..8568685fa 100644
+--- a/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.js
++++ b/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.js
+@@ -1,7 +1,7 @@
+ import React, { useMemo } from 'react';
+ import { useDispatch } from 'react-redux';
+ import IconEdit from 'components/Icons/IconEdit';
+-import { IconCode, IconDeviceFloppy } from '@tabler/icons';
++import { IconArrowUpRight, IconCode, IconDeviceFloppy } from '@tabler/icons';
+ import StyledWrapper from './StyledWrapper';
+ import { useTheme } from 'providers/Theme';
+ import TruncatedText from 'components/TruncatedText';
+@@ -17,7 +17,8 @@ const ResponseExampleTopBar = ({
+   onEditToggle,
+   onSave,
+   onCancel,
+-  onGenerateCode
++  onGenerateCode,
++  onTryExample
+ }) => {
+   const { theme } = useTheme();
+   const dispatch = useDispatch();
+@@ -180,6 +181,17 @@ const ResponseExampleTopBar = ({
+           </div>
+ 
+           <div className="flex items-center gap-3 flex-shrink-0 md:w-auto w-full md:justify-end">
++            {item?.type === 'http-request' && example?.type === 'http-request' && onTryExample && (
++              <Button
++                color="primary"
++                size="sm"
++                icon={<IconArrowUpRight size={16} stroke={2} />}
++                onClick={onTryExample}
++                data-testid="response-example-try-btn"
++              >
++                Try
++              </Button>
++            )}
+             <Button
+               color="secondary"
+               size="sm"
+diff --git a/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.spec.js b/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.spec.js
+new file mode 100644
+index 000000000..9f0def64b
+--- /dev/null
++++ b/packages/bruno-app/src/components/ResponseExample/ResponseExampleTopBar/index.spec.js
+@@ -0,0 +1,101 @@
++/**
++ * @jest-environment jsdom
++ */
++import '@testing-library/jest-dom';
++import React from 'react';
++import { fireEvent, render, screen } from '@testing-library/react';
++
++jest.mock('react-redux', () => ({
++  useDispatch: () => jest.fn()
++}));
++
++jest.mock('providers/Theme', () => ({
++  useTheme: () => ({ theme: { examples: { buttonIconColor: '#000' } } })
++}));
++
++jest.mock('providers/ReduxStore/slices/collections', () => ({
++  updateResponseExampleName: jest.fn(),
++  updateResponseExampleDescription: jest.fn()
++}));
++
++jest.mock('./StyledWrapper', () => ({ children }) => <div>{children}</div>);
++jest.mock('ui/Button', () => ({ children, onClick, ...props }) => <button type="button" onClick={onClick} {...props}>{children}</button>);
++import ResponseExampleTopBar from './index';
++
++const collection = { uid: 'collection-1' };
++const makeItem = (type = 'http-request', exampleType = 'http-request') => ({
++  uid: 'request-1',
++  type,
++  name: 'Create user',
++  draft: { examples: [{ uid: 'example-1', name: 'Created user', description: '', type: exampleType }] }
++});
++
++describe('ResponseExampleTopBar', () => {
++  it('offers a single side-effect-free Try action for an HTTP example outside edit mode', () => {
++    const onTryExample = jest.fn();
++    const { rerender } = render(
++      <ResponseExampleTopBar
++        item={makeItem()}
++        collection={collection}
++        exampleUid="example-1"
++        editMode={false}
++        onEditToggle={jest.fn()}
++        onSave={jest.fn()}
++        onCancel={jest.fn()}
++        onGenerateCode={jest.fn()}
++        onTryExample={onTryExample}
++      />
++    );
++
++    expect(screen.getByTestId('response-example-try-btn')).toHaveTextContent('Try');
++    expect(screen.queryByText('Use & Send')).not.toBeInTheDocument();
++    expect(screen.queryByTestId('response-example-use-actions-menu')).not.toBeInTheDocument();
++    fireEvent.click(screen.getByTestId('response-example-try-btn'));
++    expect(onTryExample).toHaveBeenCalledTimes(1);
++
++    rerender(
++      <ResponseExampleTopBar
++        item={makeItem('grpc-request')}
++        collection={collection}
++        exampleUid="example-1"
++        editMode={false}
++        onEditToggle={jest.fn()}
++        onSave={jest.fn()}
++        onCancel={jest.fn()}
++        onGenerateCode={jest.fn()}
++        onTryExample={onTryExample}
++      />
++    );
++    expect(screen.queryByTestId('response-example-try-btn')).not.toBeInTheDocument();
++
++    rerender(
++      <ResponseExampleTopBar
++        item={makeItem('http-request', 'grpc-request')}
++        collection={collection}
++        exampleUid="example-1"
++        editMode={false}
++        onEditToggle={jest.fn()}
++        onSave={jest.fn()}
++        onCancel={jest.fn()}
++        onGenerateCode={jest.fn()}
++        onTryExample={onTryExample}
++      />
++    );
++    expect(screen.queryByTestId('response-example-try-btn')).not.toBeInTheDocument();
++
++    rerender(
++      <ResponseExampleTopBar
++        item={makeItem()}
++        collection={collection}
++        exampleUid="example-1"
++        editMode
++        onEditToggle={jest.fn()}
++        onSave={jest.fn()}
++        onCancel={jest.fn()}
++        onGenerateCode={jest.fn()}
++        onTryExample={onTryExample}
++      />
++    );
++    expect(screen.queryByTestId('response-example-try-btn')).not.toBeInTheDocument();
++  });
++});
+diff --git a/packages/bruno-app/src/components/ResponseExample/index.js b/packages/bruno-app/src/components/ResponseExample/index.js
+index e287f40bb..e80f3b4cf 100644
+--- a/packages/bruno-app/src/components/ResponseExample/index.js
++++ b/packages/bruno-app/src/components/ResponseExample/index.js
+@@ -1,8 +1,11 @@
+ import React, { useState, useEffect, useRef } from 'react';
+ import { useSelector, useDispatch } from 'react-redux';
++import toast from 'react-hot-toast';
+ import { updateRequestPaneTabWidth, clearOpenInEditMode } from 'providers/ReduxStore/slices/tabs';
+-import { saveRequest } from 'providers/ReduxStore/slices/collections/actions';
++import { saveRequest, useResponseExampleInRequest } from 'providers/ReduxStore/slices/collections/actions';
+ import { cancelResponseExampleEdit } from 'providers/ReduxStore/slices/collections';
++import Modal from 'components/Modal';
++import { hasAnyExampleChanges, hasRequestTransportChanges } from 'utils/collections';
+ import ResponseExampleTopBar from './ResponseExampleTopBar';
+ import ResponseExampleRequestPane from './ResponseExampleRequestPane';
+ import ResponseExampleResponsePane from './ResponseExampleResponsePane';
+@@ -13,7 +16,6 @@ const MIN_LEFT_PANE_WIDTH = 300;
+ const MIN_RIGHT_PANE_WIDTH = 350;
+ const MIN_TOP_PANE_HEIGHT = 150;
+ const MIN_BOTTOM_PANE_HEIGHT = 150;
+-
+ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
+   const dispatch = useDispatch();
+   const preferences = useSelector((state) => state.app.preferences);
+@@ -29,8 +31,10 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
+   // JSON examples (default content '{}') or on saved examples with a legitimately empty body.
+   const [editMode, setEditMode] = useState(!!openInEditMode);
+   const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
++  const [showReplaceRequestModal, setShowReplaceRequestModal] = useState(false);
+   const dragOffset = useRef({ x: 0, y: 0 });
+   const mainSectionRef = useRef(null);
++  const replaceRequestModalOpenRef = useRef(false);
+ 
+   // Consume the one-shot flag so remounts (tab switch) don't re-enter edit mode.
+   useEffect(() => {
+@@ -129,8 +133,44 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
+     setShowGenerateCodeModal(false);
+   };
+ 
+-  const handleTryExample = (example) => {
+-    // TODO: Implement try example functionality
++  const applyExampleToRequest = async () => {
++    const result = await dispatch(useResponseExampleInRequest({
++      itemUid: item.uid,
++      collectionUid: collection.uid,
++      exampleUid: example.uid
++    }));
++
++    if (!result?.applied) {
++      if (result?.reason === 'unsaved-example-edits') {
++        toast.error('Save or cancel example edits before using an example.');
++      } else if (result?.reason === 'unsupported-example') {
++        toast.error('Only HTTP examples can be used in a request.');
++      } else if (result?.reason === 'not-applicable') {
++        toast.error('This example does not contain a request to use.');
++      }
++      return;
++    }
++
++    toast.success(`Request filled from example "${example.name}"`);
++  };
++
++  const handleTryExample = () => {
++    if (item?.type !== 'http-request' || !item?.uid || !collection?.uid || !example?.uid) {
++      return;
++    }
++
++    if (hasAnyExampleChanges(item)) {
++      toast.error('Save or cancel example edits before using an example.');
++      return;
++    }
++
++    if (hasRequestTransportChanges(item)) {
++      replaceRequestModalOpenRef.current = true;
++      setShowReplaceRequestModal(true);
++      return;
++    }
++
++    applyExampleToRequest();
+   };
+ 
+   // Update width when screen width or sidebar width changes
+@@ -176,7 +216,7 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
+           onSave={handleSave}
+           onCancel={handleCancel}
+           onGenerateCode={handleGenerateCode}
+-          onTryExample={handleTryExample}
++          onTryExample={item?.type === 'http-request' && example?.type === 'http-request' ? handleTryExample : undefined}
+         />
+         <section ref={mainSectionRef} className={`main wrapper flex mt-4 ${isVerticalLayout ? 'flex-col' : ''} flex-grow pb-4 relative overflow-auto scrollbar-hover`}>
+           <section className="request-pane" data-testid="request-pane">
+@@ -227,6 +267,34 @@ const ResponseExample = ({ item, collection, example, openInEditMode }) => {
+           exampleUid={example.uid}
+         />
+       )}
++
++      {showReplaceRequestModal && (
++        <Modal
++          size="sm"
++          title="Replace request values?"
++          confirmText="Replace"
++          cancelText="Cancel"
++          closeModalFadeTimeout={0}
++          onCloseInitiated={() => {
++            replaceRequestModalOpenRef.current = false;
++          }}
++          handleCancel={() => {
++            replaceRequestModalOpenRef.current = false;
++            setShowReplaceRequestModal(false);
++          }}
++          handleConfirm={() => {
++            if (!replaceRequestModalOpenRef.current) {
++              return;
++            }
++            replaceRequestModalOpenRef.current = false;
++            setShowReplaceRequestModal(false);
++            applyExampleToRequest();
++          }}
++          dataTestId="replace-request-from-example-modal"
++        >
++          <p>Your unsaved method, URL, parameters, headers, and body will be replaced by this example.</p>
++        </Modal>
++      )}
+     </>
+   );
+ };
+diff --git a/packages/bruno-app/src/components/ResponseExample/index.spec.js b/packages/bruno-app/src/components/ResponseExample/index.spec.js
+new file mode 100644
+index 000000000..b9f63e342
+--- /dev/null
++++ b/packages/bruno-app/src/components/ResponseExample/index.spec.js
+@@ -0,0 +1,171 @@
++/**
++ * @jest-environment jsdom
++ */
++import '@testing-library/jest-dom';
++import React from 'react';
++import { act, fireEvent, render, screen } from '@testing-library/react';
++import { Provider } from 'react-redux';
++import { configureStore } from '@reduxjs/toolkit';
++import toast from 'react-hot-toast';
++
++const mockDispatch = jest.fn();
++const mockUseResponseExampleInRequest = jest.fn((payload) => async () => ({ applied: true, payload }));
++
++jest.mock('react-redux', () => ({
++  ...jest.requireActual('react-redux'),
++  useDispatch: () => mockDispatch
++}));
++
++jest.mock('providers/ReduxStore/slices/tabs', () => ({
++  updateRequestPaneTabWidth: (payload) => ({ type: 'updateRequestPaneTabWidth', payload }),
++  clearOpenInEditMode: (payload) => ({ type: 'clearOpenInEditMode', payload }),
++  addTab: (payload) => ({ type: 'addTab', payload })
++}));
++
++jest.mock('providers/ReduxStore/slices/collections/actions', () => ({
++  saveRequest: jest.fn(),
++  useResponseExampleInRequest: (payload) => mockUseResponseExampleInRequest(payload)
++}));
++
++jest.mock('providers/ReduxStore/slices/collections', () => ({
++  applyResponseExampleToRequest: (payload) => ({ type: 'applyResponseExampleToRequest', payload }),
++  cancelResponseExampleEdit: (payload) => ({ type: 'cancelResponseExampleEdit', payload })
++}));
++
++jest.mock('react-hot-toast', () => ({ success: jest.fn(), error: jest.fn() }));
++jest.mock('./StyledWrapper', () => ({ children }) => <div>{children}</div>);
++jest.mock('./ResponseExampleTopBar', () => ({ onTryExample }) => (
++  <>
++    <button type="button" onClick={onTryExample}>Try</button>
++  </>
++));
++jest.mock('./ResponseExampleRequestPane', () => () => <div />);
++jest.mock('./ResponseExampleResponsePane', () => () => <div />);
++jest.mock('components/Sidebar/Collections/Collection/CollectionItem/GenerateCodeItem', () => () => <div />);
++jest.mock('ui/HeightBoundContainer', () => ({ children }) => <div>{children}</div>);
++jest.mock('components/Modal/StyledWrapper', () => ({ children }) => <div>{children}</div>);
++jest.mock('ui/Button', () => ({ children, onClick, ...props }) => <button type="button" onClick={onClick} {...props}>{children}</button>);
++
++import ResponseExample from './index';
++
++const collection = { uid: 'collection-1' };
++const example = { uid: 'example-1', name: 'Created user', type: 'http-request' };
++
++const makeItem = (draftRequest = null) => ({
++  uid: 'request-1',
++  type: 'http-request',
++  pathname: '/requests/create-user.bru',
++  request: {
++    method: 'GET',
++    url: 'https://saved.example.test/users',
++    headers: [],
++    params: [],
++    body: { mode: 'none' }
++  },
++  ...(draftRequest ? { draft: { request: draftRequest } } : {})
++});
++
++const renderExample = (item) => {
++  const store = configureStore({
++    reducer: {
++      app: (state = { preferences: {}, screenWidth: 1200, leftSidebarWidth: 240 }) => state
++    }
++  });
++
++  return render(
++    <Provider store={store}>
++      <ResponseExample item={item} collection={collection} example={example} />
++    </Provider>
++  );
++};
++
++describe('ResponseExample Try', () => {
++  beforeEach(() => {
++    jest.useFakeTimers();
++    mockDispatch.mockClear();
++    mockUseResponseExampleInRequest.mockClear();
++    toast.error.mockClear();
++    toast.success.mockClear();
++    mockDispatch.mockImplementation((action) => (typeof action === 'function' ? action() : action));
++  });
++
++  afterEach(() => {
++    jest.useRealTimers();
++  });
++
++  it('requires replacement confirmation only when the parent request has unsaved transport changes', () => {
++    const item = makeItem({
++      method: 'POST',
++      url: 'https://saved.example.test/users',
++      headers: [],
++      params: [],
++      body: { mode: 'none' }
++    });
++
++    renderExample(item);
++    fireEvent.click(screen.getByText('Try'));
++
++    expect(screen.getByTestId('replace-request-from-example-modal')).toBeInTheDocument();
++    expect(mockUseResponseExampleInRequest).not.toHaveBeenCalled();
++
++    fireEvent.click(screen.getByText('Cancel'));
++    fireEvent.keyDown(document, { keyCode: 13 });
++    expect(mockUseResponseExampleInRequest).not.toHaveBeenCalled();
++    act(() => jest.runOnlyPendingTimers());
++
++    fireEvent.click(screen.getByText('Try'));
++    fireEvent.click(screen.getByText('Replace'));
++
++    expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith({
++      collectionUid: 'collection-1',
++      itemUid: 'request-1',
++      exampleUid: 'example-1'
++    });
++  });
++
++  it('applies without a replacement prompt when only non-transport request fields are dirty', () => {
++    const item = makeItem({
++      method: 'GET',
++      url: 'https://saved.example.test/users',
++      headers: [],
++      params: [],
++      body: { mode: 'none' },
++      auth: { mode: 'bearer', token: 'unsaved-parent-token' }
++    });
++
++    renderExample(item);
++    fireEvent.click(screen.getByText('Try'));
++
++    expect(screen.queryByTestId('replace-request-from-example-modal')).not.toBeInTheDocument();
++    expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith({
++      collectionUid: 'collection-1',
++      itemUid: 'request-1',
++      exampleUid: 'example-1'
++    });
++  });
++
++  it('blocks Try while any example has unsaved edits', () => {
++    const item = makeItem({
++      method: 'GET',
++      url: 'https://saved.example.test/users',
++      headers: [],
++      params: [],
++      body: { mode: 'none' }
++    });
++    item.examples = [{
++      ...example,
++      type: 'http-request',
++      request: { method: 'POST', url: 'https://example.test/users', headers: [], params: [], body: { mode: 'none' } }
++    }];
++    item.draft.examples = [{
++      ...item.examples[0],
++      name: 'Unsaved example name'
++    }];
++
++    renderExample(item);
++    fireEvent.click(screen.getByText('Try'));
++
++    expect(mockUseResponseExampleInRequest).not.toHaveBeenCalled();
++    expect(toast.error).toHaveBeenCalledWith('Save or cancel example edits before using an example.');
++  });
++});
+diff --git a/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js
+index b2f5680ef..eb2df837a 100644
+--- a/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js
+@@ -1,6 +1,7 @@
+ import React, { forwardRef, useRef } from 'react';
+ import styled from 'styled-components';
+ import { IconDots, IconDownload, IconEraser, IconBookmark, IconCopy, IconLayoutColumns, IconLayoutRows } from '@tabler/icons';
++import toast from 'react-hot-toast';
+ import MenuDropdown from 'ui/MenuDropdown';
+ import ResponseDownload from '../ResponseDownload';
+ import ResponseBookmark from '../ResponseBookmark';
+@@ -8,6 +9,8 @@ import ResponseClear from '../ResponseClear';
+ import ResponseLayoutToggle, { useResponseLayoutToggle } from '../ResponseLayoutToggle';
+ import ResponseCopy from '../ResponseCopy/index';
+ import StyledWrapper from './StyledWrapper';
++import { buildResponseDebugMarkdown } from 'utils/response/debugContextMarkdown';
++import IconSparkles from 'components/Icons/IconSparkles';
+ 
+ const StyledMenuIcon = styled.button`
+   display: flex;
+@@ -37,7 +40,7 @@ const MenuIcon = forwardRef((props, ref) => (
+ 
+ MenuIcon.displayName = 'MenuIcon';
+ 
+-const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, selectedTab, data, dataBuffer }) => {
++const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, selectedTab, data, dataBuffer, selectedRequest }) => {
+   const { orientation } = useResponseLayoutToggle();
+ 
+   // Refs to access child component imperative handles (click, isDisabled)
+@@ -47,6 +50,16 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+   const copyButtonRef = useRef(null);
+   const layoutToggleButtonRef = useRef(null);
+ 
++  const copyForAI = async () => {
++    try {
++      const markdown = buildResponseDebugMarkdown({ selectedRequest, collection, item });
++      await navigator.clipboard.writeText(markdown);
++      toast.success('Debug context copied for AI');
++    } catch (error) {
++      toast.error('Failed to copy API debug context');
++    }
++  };
++
+   /**
+    * GQL response actions missing with Save response - because their is schema validation missing for saving GQL response will undo once example
+    * scehem is updated
+@@ -61,6 +74,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+       },
+       onClick: () => copyButtonRef.current?.click()
+     },
++    {
++      id: 'copy-for-ai',
++      label: 'Copy for AI',
++      leftSection: <IconSparkles size={16} strokeWidth={1.5} color="currentColor" />,
++      onClick: copyForAI
++    },
+     {
+       id: 'download-response',
+       label: 'Download response',
+@@ -100,6 +119,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+       },
+       onClick: () => copyButtonRef.current?.click()
+     },
++    {
++      id: 'copy-for-ai',
++      label: 'Copy for AI',
++      leftSection: <IconSparkles size={16} strokeWidth={1.5} color="currentColor" />,
++      onClick: copyForAI
++    },
+     {
+       id: 'save-response',
+       label: 'Save response',
+diff --git a/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.spec.js b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.spec.js
+new file mode 100644
+index 000000000..67da15af3
+--- /dev/null
++++ b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.spec.js
+@@ -0,0 +1,162 @@
++import { fireEvent, render, screen, waitFor } from '@testing-library/react';
++import { ThemeProvider } from 'styled-components';
++import ResponsePaneActions from './index';
++import { buildSelectedRequestForResponseActions } from '../copyForAIPayload';
++
++jest.mock('react-hot-toast', () => ({
++  success: jest.fn(),
++  error: jest.fn()
++}));
++
++jest.mock('ui/MenuDropdown', () => {
++  const React = require('react');
++  const renderSection = (section, testId) => {
++    if (!section) return null;
++    if (typeof section === 'function') return React.createElement(section, { 'data-testid': testId });
++    return React.cloneElement(section, { 'data-testid': section.props?.['data-testid'] || testId });
++  };
++
++  return ({ children, items = [] }) => (
++    <div>
++      {children}
++      <div role="menu">
++        {items.map((item) => (
++          <button key={item.id} role="menuitem" onClick={item.onClick} disabled={item.disabled}>
++            {renderSection(item.leftSection, `${item.id}-icon`)}
++            {item.label}
++          </button>
++        ))}
++      </div>
++    </div>
++  );
++});
++
++jest.mock('../ResponseBookmark', () => () => null);
++jest.mock('../ResponseDownload', () => () => null);
++jest.mock('../ResponseClear', () => () => null);
++jest.mock('../ResponseLayoutToggle', () => ({
++  __esModule: true,
++  default: () => null,
++  useResponseLayoutToggle: () => ({ orientation: 'vertical' })
++}));
++jest.mock('../ResponseCopy', () => {
++  const React = require('react');
++  return React.forwardRef((_props, ref) => {
++    React.useImperativeHandle(ref, () => ({ click: jest.fn(), isDisabled: false }));
++    return null;
++  });
++});
++
++const theme = {
++  workspace: { border: '#374151' },
++  dropdown: { iconColor: '#d1d5db' },
++  app: { collection: { toolbar: { environmentSelector: { hoverBorder: '#60a5fa' } } } },
++  text: '#f9fafb'
++};
++
++const item = {
++  uid: 'req-1',
++  type: 'http-request',
++  name: 'Delete User',
++  request: {
++    method: 'DELETE',
++    url: 'https://api.example.com/v1/users/42',
++    headers: {
++      Accept: 'application/json',
++      Authorization: 'Bearer test-token'
++    }
++  },
++  response: {
++    statusCode: 404,
++    statusText: 'Not Found',
++    headers: { 'content-type': 'application/json' },
++    data: { error: 'USER_NOT_FOUND' }
++  }
++};
++
++describe('ResponsePaneActions', () => {
++  beforeEach(() => {
++    navigator.clipboard = { writeText: jest.fn().mockResolvedValue() };
++  });
++
++  it('copies complete debug Markdown from the more-actions menu', async () => {
++    render(
++      <ThemeProvider theme={theme}>
++        <ResponsePaneActions
++          item={item}
++          collection={{ uid: 'col-1', name: 'Users API' }}
++          selectedRequest={{
++            itemUid: item.uid,
++            collectionUid: 'col-1',
++            data: {
++              request: item.request,
++              response: {
++                ...item.response,
++                timeline: [
++                  { type: 'request', message: 'DELETE https://api.example.com/v1/users/42' },
++                  { type: 'response', message: 'HTTP/1.1 404 Not Found' }
++                ]
++              }
++            }
++          }}
++          responseSize={20}
++          selectedFormat="raw"
++          selectedTab="editor"
++          data={item.response.data}
++        />
++      </ThemeProvider>
++    );
++
++    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy for AI' }));
++
++    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1));
++    const copiedText = navigator.clipboard.writeText.mock.calls[0][0];
++    expect(copiedText).toContain('# API Debug Context');
++    expect(copiedText).toContain('# Request (cURL)');
++    expect(copiedText).toContain('# Response');
++    expect(copiedText).toContain('curl -X DELETE \'https://api.example.com/v1/users/42\'');
++    expect(copiedText).toContain('- Authorization: Bearer test-token');
++  });
++
++  it('renders a Copy for AI action with the AI icon', () => {
++    render(
++      <ThemeProvider theme={theme}>
++        <ResponsePaneActions
++          item={item}
++          collection={{ uid: 'col-1', name: 'Users API' }}
++          responseSize={20}
++          selectedFormat="raw"
++          selectedTab="editor"
++          data={item.response.data}
++        />
++      </ThemeProvider>
++    );
++
++    expect(screen.getByRole('menuitem', { name: 'Copy for AI' })).toBeInTheDocument();
++    expect(screen.getByTestId('copy-for-ai-icon')).toBeInTheDocument();
++    expect(screen.queryByRole('menuitem', { name: 'Copy as Markdown' })).not.toBeInTheDocument();
++  });
++
++  it('keeps the response network logs when preparing the Copy for AI payload', () => {
++    const responseTimeline = [
++      { type: 'request', message: 'GET https://api.example.com/v1/workspaces/42' },
++      { type: 'request', message: 'Authorization: Bearer test-token' }
++    ];
++
++    const selectedRequest = buildSelectedRequestForResponseActions({
++      item: {
++        ...item,
++        response: {
++          ...item.response,
++          timeline: responseTimeline
++        }
++      },
++      collection: {
++        uid: 'col-1',
++        timeline: [{ itemUid: item.uid, type: 'request', message: 'GET {{baseUrl}}/v1/workspaces/:workspaceId' }]
++      }
++    });
++
++    expect(selectedRequest.data.response.timeline).toBe(responseTimeline);
++  });
++});
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.js
+index 0049fe588..62bef4863 100644
+--- a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.js
+@@ -1,49 +1,114 @@
+-import { useState } from 'react';
++import React, { useMemo, useState } from 'react';
++import get from 'lodash/get';
+ import { IconChevronDown, IconChevronRight } from '@tabler/icons';
++import { useSelector } from 'react-redux';
++import { useTheme } from 'providers/Theme';
++import CodeEditor from 'components/CodeEditor';
++import { serializeBulkKeyValue } from 'utils/common/bulkKeyValueUtils';
+ 
+ const toEntries = (headers) => {
+   if (!headers) return [];
+   if (Array.isArray(headers)) {
+-    return headers.map((h) => ({ name: h?.name, value: h?.value }));
++    return headers.map((header, index) => ({
++      uid: header?.uid || `header-${index}`,
++      name: header?.name ?? header?.key ?? '',
++      value: header?.value,
++      enabled: header?.enabled !== false
++    }));
++  }
++
++  return Object.entries(headers).map(([name, value], index) => ({
++    uid: `header-${index}`,
++    name,
++    value,
++    enabled: true
++  }));
++};
++
++const stringifyHeaderValue = (value) => {
++  if (typeof value === 'string') return value;
++  if (value === undefined) return 'undefined';
++  if (value === null) return 'null';
++
++  try {
++    return JSON.stringify(value);
++  } catch {
++    return String(value);
+   }
+-  return Object.entries(headers).map(([name, value]) => ({ name, value }));
+ };
+ 
+-const Headers = ({ headers, variant }) => {
++const Headers = ({ headers, type, variant }) => {
++  const preferences = useSelector((state) => state.app.preferences);
++  const { displayedTheme } = useTheme();
+   const [isOpen, setIsOpen] = useState(true);
++  const [viewMode, setViewMode] = useState('key-value');
++  const headerType = type || variant || 'headers';
+   const entries = toEntries(headers);
+   const count = entries.length;
++  const tableRows = useMemo(() => entries.map((entry) => ({
++    ...entry,
++    value: stringifyHeaderValue(entry.value)
++  })), [entries]);
++  const bulkText = useMemo(() => serializeBulkKeyValue(tableRows), [tableRows]);
++  const nextViewLabel = viewMode === 'key-value' ? 'Bulk' : 'Key/Value';
+ 
+   return (
+     <div className="tl-block">
+-      <button
+-        type="button"
+-        className="tl-block-h"
+-        aria-expanded={isOpen}
+-        data-testid="headers-toggle"
+-        onClick={() => setIsOpen(!isOpen)}
+-      >
+-        <span className="tl-block-chev">
+-          {isOpen ? <IconChevronDown size={12} strokeWidth={2} /> : <IconChevronRight size={12} strokeWidth={2} />}
+-        </span>
+-        Headers
+-        <span className="tl-block-count">({count})</span>
+-      </button>
++      <div className="tl-block-h flex items-center">
++        <button
++          type="button"
++          className="flex items-center flex-1 text-left"
++          aria-expanded={isOpen}
++          data-testid={`${headerType}-headers-toggle`}
++          onClick={() => setIsOpen(!isOpen)}
++        >
++          <span className="tl-block-chev">
++            {isOpen ? <IconChevronDown size={12} strokeWidth={2} /> : <IconChevronRight size={12} strokeWidth={2} />}
++          </span>
++          Headers
++          <span className="tl-block-count">({count})</span>
++        </button>
++        <div className="flex items-center gap-1 mr-2" role="group" aria-label={`${headerType} headers view mode`}>
++          <button
++            type="button"
++            className="btn-action text-link select-none"
++            data-testid={`${headerType}-headers-view-toggle`}
++            onClick={() => setViewMode(viewMode === 'key-value' ? 'bulk' : 'key-value')}
++          >
++            {nextViewLabel}
++          </button>
++        </div>
++      </div>
+       {isOpen && (
+         count === 0
+           ? <div className="tl-empty">No Headers</div>
+-          : (
+-              <table className="tl-headers-table" data-testid={`tl-headers-table-${variant}`}>
+-                <tbody>
+-                  {entries.map((h, i) => (
+-                    <tr key={i} data-testid={`tl-header-row-${variant}`}>
+-                      <td className="tl-headers-key" data-testid={`tl-header-name-${variant}`}>{h.name}</td>
+-                      <td className="tl-headers-val" data-testid={`tl-header-value-${variant}`}>{String(h.value)}</td>
+-                    </tr>
+-                  ))}
+-                </tbody>
+-              </table>
+-            )
++          : viewMode === 'bulk'
++            ? (
++                <div className="tl-headers-bulk-viewer">
++                  <div className="h-[200px]">
++                    <CodeEditor
++                      mode="text/plain"
++                      theme={displayedTheme}
++                      font={get(preferences, 'font.codeFont', 'default')}
++                      fontSize={get(preferences, 'font.codeFontSize')}
++                      value={bulkText}
++                      readOnly={true}
++                    />
++                  </div>
++                </div>
++              )
++            : (
++                <table className="tl-headers-table" data-testid={`tl-headers-table-${headerType}`}>
++                  <tbody>
++                    {entries.map((header, index) => (
++                      <tr key={header.uid || index} data-testid={`tl-header-row-${headerType}`}>
++                        <td className="tl-headers-key" data-testid={`tl-header-name-${headerType}`}>{header.name}</td>
++                        <td className="tl-headers-val" data-testid={`tl-header-value-${headerType}`}>{stringifyHeaderValue(header.value)}</td>
++                      </tr>
++                    ))}
++                  </tbody>
++                </table>
++              )
+       )}
+     </div>
+   );
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.spec.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.spec.js
+new file mode 100644
+index 000000000..3b3d3b90e
+--- /dev/null
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Common/Headers/index.spec.js
+@@ -0,0 +1,98 @@
++import '@testing-library/jest-dom';
++import React from 'react';
++import { fireEvent, render, screen } from '@testing-library/react';
++import Headers from './index';
++
++jest.mock('components/CodeEditor', () => ({ value, readOnly, mode, theme, font, fontSize, onEdit }) => (
++  <textarea
++    data-testid="timeline-code-editor"
++    value={value}
++    readOnly={readOnly}
++    data-mode={mode}
++    data-theme={theme}
++    data-font={font}
++    data-font-size={fontSize}
++    data-has-on-edit={onEdit ? 'true' : undefined}
++    onChange={onEdit}
++  />
++));
++
++jest.mock('providers/Theme', () => ({ useTheme: () => ({ storedTheme: 'system', displayedTheme: 'dark' }) }));
++jest.mock('react-redux', () => ({
++  useSelector: (selector) => selector({
++    app: {
++      preferences: {
++        font: {
++          codeFont: 'Fira Code',
++          codeFontSize: 13
++        }
++      }
++    }
++  })
++}));
++
++describe('Timeline Headers', () => {
++  it('defaults to the Key/Value table and switches to readonly Bulk text', () => {
++    render(
++      <Headers
++        type="request"
++        headers={[
++          { name: 'content-type', value: 'application/json; charset=utf-8' },
++          { name: 'X-Request', value: 'request-value' }
++        ]}
++      />
++    );
++
++    expect(screen.queryByTestId('timeline-code-editor')).not.toBeInTheDocument();
++    expect(screen.getByRole('button', { name: 'Bulk' })).toBeInTheDocument();
++    expect(screen.getByText('content-type')).toBeInTheDocument();
++    fireEvent.click(screen.getByRole('button', { name: 'Bulk' }));
++
++    const editor = screen.getByTestId('timeline-code-editor');
++    expect(editor).toHaveAttribute('readonly');
++    expect(editor).toHaveAttribute('data-mode', 'text/plain');
++    expect(editor).toHaveAttribute('data-theme', 'dark');
++    expect(editor).toHaveAttribute('data-font', 'Fira Code');
++    expect(editor).toHaveAttribute('data-font-size', '13');
++    expect(editor).not.toHaveAttribute('data-has-on-edit');
++    expect(editor).toHaveValue('content-type:application/json; charset=utf-8\nX-Request:request-value');
++    expect(screen.getByTestId('request-headers-view-toggle')).toHaveTextContent('Key/Value');
++    expect(screen.queryByRole('button', { name: 'Bulk' })).not.toBeInTheDocument();
++    expect(screen.queryByText('Key/Value Edit')).not.toBeInTheDocument();
++    expect(screen.queryByText('Bulk Edit')).not.toBeInTheDocument();
++    expect(screen.queryByText('Key-Value')).not.toBeInTheDocument();
++
++    fireEvent.click(screen.getByRole('button', { name: 'Key/Value' }));
++    expect(screen.queryByTestId('timeline-code-editor')).not.toBeInTheDocument();
++    expect(screen.getByRole('button', { name: 'Bulk' })).toBeInTheDocument();
++  });
++
++  it('switches response headers independently and returns to Bulk', () => {
++    render(<Headers type="response" headers={{ 'X-Response': 'response-value' }} />);
++
++    fireEvent.click(screen.getByRole('button', { name: 'Bulk' }));
++
++    expect(screen.getByTestId('timeline-code-editor')).toBeInTheDocument();
++    fireEvent.click(screen.getByTestId('response-headers-view-toggle'));
++    expect(screen.queryByTestId('timeline-code-editor')).not.toBeInTheDocument();
++    expect(screen.getByRole('button', { name: 'Bulk' })).toBeInTheDocument();
++  });
++
++  it('keeps request and response view modes independent', () => {
++    render(
++      <>
++        <Headers type="request" headers={{ Request: 'one' }} />
++        <Headers type="response" headers={{ Response: 'two' }} />
++      </>
++    );
++
++    fireEvent.click(screen.getAllByRole('button', { name: 'Bulk' })[0]);
++
++    expect(screen.getAllByTestId('timeline-code-editor')).toHaveLength(1);
++    expect(screen.getByRole('button', { name: 'Key/Value' })).toBeInTheDocument();
++    expect(screen.getAllByRole('button', { name: 'Bulk' })).toHaveLength(1);
++    expect(screen.queryByText('Key/Value Edit')).not.toBeInTheDocument();
++    expect(screen.queryByText('Bulk Edit')).not.toBeInTheDocument();
++    expect(screen.queryByText('Key-Value')).not.toBeInTheDocument();
++  });
++});
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/StyledWrapper.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/StyledWrapper.js
+index e92907e89..d62db6c66 100644
+--- a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/StyledWrapper.js
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/StyledWrapper.js
+@@ -1,6 +1,42 @@
+ import styled from 'styled-components';
+ 
+ const StyledWrapper = styled.div`
++  .network-logs-header {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    gap: 8px;
++    margin-bottom: 8px;
++
++    h4 {
++      margin: 0;
++      font-size: 14px;
++      font-weight: 500;
++    }
++  }
++
++  .copy-button {
++    display: flex;
++    align-items: center;
++    gap: 4px;
++    padding: 3px 6px;
++    background: transparent;
++    border: 1px solid ${(props) => props.theme.border.border1};
++    border-radius: 4px;
++    color: ${(props) => props.theme.colors.text.muted};
++    cursor: pointer;
++    font-size: 12px;
++
++    &:hover:not(:disabled) {
++      color: ${(props) => props.theme.text};
++    }
++
++    &:disabled {
++      cursor: not-allowed;
++      opacity: 0.5;
++    }
++  }
++
+   .network-logs-container {
+     color: ${(props) => props.theme.text};
+   }
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.js
+index 382f550ed..d85e77969 100644
+--- a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.js
+@@ -1,29 +1,8 @@
++import React from 'react';
++import { IconCopy } from '@tabler/icons';
++import toast from 'react-hot-toast';
+ import StyledWrapper from './StyledWrapper';
+ 
+-const Network = ({ logs }) => {
+-  return (
+-    <StyledWrapper>
+-      <div className="network-logs-container">
+-        <pre className="network-logs-pre">
+-          {logs.map((currentLog, index) => {
+-            if (index > 0 && currentLog?.type === 'separator') {
+-              return <div className="network-logs-separator" key={index} />;
+-            }
+-            const nextLog = logs[index + 1];
+-            const isSameLogType = nextLog?.type === currentLog?.type;
+-            return (
+-              <div key={index}>
+-                <NetworkLogsEntry entry={currentLog} />
+-                {!isSameLogType && <div className="network-logs-spacing" />}
+-              </div>
+-            );
+-          })}
+-        </pre>
+-      </div>
+-    </StyledWrapper>
+-  );
+-};
+-
+ const NetworkLogsEntry = ({ entry }) => {
+   const { type, message } = entry;
+   let className = 'network-logs-entry';
+@@ -59,4 +38,54 @@ const NetworkLogsEntry = ({ entry }) => {
+   );
+ };
+ 
++const Network = ({ logs, showCopy = false }) => {
++  const networkLogs = Array.isArray(logs) ? logs : [];
++  const handleCopy = async () => {
++    try {
++      await navigator.clipboard.writeText(networkLogs
++        .map((entry) => (entry?.type === 'separator' ? '' : entry?.message ?? String(entry)))
++        .join('\n'));
++      toast.success('Network logs copied to clipboard');
++    } catch (error) {
++      toast.error('Failed to copy network logs');
++    }
++  };
++
++  return (
++    <StyledWrapper>
++      {showCopy && (
++        <div className="network-logs-header">
++          <h4>Network Logs</h4>
++          <button
++            className="copy-button"
++            type="button"
++            onClick={handleCopy}
++            disabled={networkLogs.length === 0}
++          >
++            <IconCopy size={16} strokeWidth={2} />
++            Copy
++          </button>
++        </div>
++      )}
++      <div className="network-logs-container">
++        <pre className="network-logs-pre">
++          {networkLogs.map((currentLog, index) => {
++            if (index > 0 && currentLog?.type === 'separator') {
++              return <div className="network-logs-separator" key={index} />;
++            }
++            const nextLog = networkLogs[index + 1];
++            const isSameLogType = nextLog?.type === currentLog?.type;
++            return (
++              <div key={index}>
++                <NetworkLogsEntry entry={currentLog} />
++                {!isSameLogType && <div className="network-logs-spacing" />}
++              </div>
++            );
++          })}
++        </pre>
++      </div>
++    </StyledWrapper>
++  );
++};
++
+ export default Network;
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.spec.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.spec.js
+new file mode 100644
+index 000000000..072bc9510
+--- /dev/null
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Network/index.spec.js
+@@ -0,0 +1,95 @@
++import React from 'react';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { ThemeProvider } from 'styled-components';
++import toast from 'react-hot-toast';
++import Network from './index';
++
++jest.mock('react-hot-toast', () => ({
++  success: jest.fn(),
++  error: jest.fn()
++}));
++
++const theme = {
++  text: '#fff',
++  textLink: '#fff',
++  border: { border1: '#333' },
++  colors: { text: { muted: '#aaa', green: '#0f0', danger: '#f00', purple: '#a0f', yellow: '#ff0' } }
++};
++
++describe('Timeline Network', () => {
++  beforeEach(() => {
++    jest.clearAllMocks();
++  });
++
++  it('does not render a Copy action by default', () => {
++    render(
++      <ThemeProvider theme={theme}>
++        <Network logs={[{ type: 'request', message: 'GET https://api.example.com/users' }]} />
++      </ThemeProvider>
++    );
++
++    expect(screen.queryByRole('button', { name: 'Copy' })).not.toBeInTheDocument();
++  });
++
++  it('copies the raw displayed network logs', async () => {
++    const writeText = jest.fn().mockResolvedValue(undefined);
++    Object.assign(navigator, { clipboard: { writeText } });
++    const logs = [
++      { type: 'request', message: 'GET https://api.example.com/users' },
++      { type: 'requestHeader', message: 'Authorization: Basic real-token' },
++      { type: 'separator' },
++      { type: 'response', message: 'HTTP/1.1 200 OK' }
++    ];
++
++    render(
++      <ThemeProvider theme={theme}>
++        <Network logs={logs} showCopy={true} />
++      </ThemeProvider>
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
++
++    await waitFor(() => expect(writeText).toHaveBeenCalledWith([
++      'GET https://api.example.com/users',
++      'Authorization: Basic real-token',
++      '',
++      'HTTP/1.1 200 OK'
++    ].join('\n')));
++    expect(toast.success).toHaveBeenCalledWith('Network logs copied to clipboard');
++  });
++
++  it('shows an error when clipboard copy fails', async () => {
++    const writeText = jest.fn().mockRejectedValue(new Error('Clipboard unavailable'));
++    Object.assign(navigator, { clipboard: { writeText } });
++
++    render(
++      <ThemeProvider theme={theme}>
++        <Network logs={[{ type: 'error', message: 'there was an error executing the request!' }]} showCopy={true} />
++      </ThemeProvider>
++    );
++
++    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
++
++    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to copy network logs'));
++  });
++
++  it('disables the Copy action when there are no logs', () => {
++    render(
++      <ThemeProvider theme={theme}>
++        <Network logs={[]} showCopy={true} />
++      </ThemeProvider>
++    );
++
++    expect(screen.getByRole('button', { name: 'Copy' })).toBeDisabled();
++  });
++
++  it('disables the Copy action when logs is not an array', () => {
++    render(
++      <ThemeProvider theme={theme}>
++        <Network logs={null} showCopy={true} />
++      </ThemeProvider>
++    );
++
++    expect(screen.getByRole('button', { name: 'Copy' })).toBeDisabled();
++  });
++});
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Request/index.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Request/index.js
+index 47ca39379..747f110fe 100644
+--- a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Request/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Request/index.js
+@@ -7,25 +7,23 @@ const safeStringifyJSONIfNotString = (obj) => {
+   if (typeof obj === 'string') return obj;
+   try {
+     return JSON.stringify(obj);
+-  } catch (e) {
++  } catch {
+     return '[Unserializable Object]';
+   }
+ };
+ 
+ const Request = ({ collection, request, item, response }) => {
+   let { headers, data, dataBuffer, error } = request || {};
+-
+   const sentHeaders = sentHeadersFromTimeline(response?.timeline);
+-  /** In case of `bru.sendRequest` it builds its own entry in timeline,
+-   * so to show the headers sent in new request we need headers not sentHeaders */
+   const displayedHeaders = sentHeaders.length ? sentHeaders : headers;
++
+   if (!dataBuffer) {
+     dataBuffer = Buffer.from(safeStringifyJSONIfNotString(data))?.toString('base64');
+   }
+ 
+   return (
+     <>
+-      <Headers headers={displayedHeaders} variant="request" />
++      <Headers headers={displayedHeaders} type="request" />
+       <BodyBlock
+         collection={collection}
+         data={data}
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Response/index.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Response/index.js
+index 6e0bf3d05..6f85a41ce 100644
+--- a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Response/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/Response/index.js
+@@ -8,7 +8,7 @@ const safeStringifyJSONIfNotString = (obj) => {
+   if (typeof obj === 'string') return obj;
+   try {
+     return JSON.stringify(obj);
+-  } catch (e) {
++  } catch {
+     return '[Unserializable Object]';
+   }
+ };
+@@ -23,7 +23,7 @@ const statusColor = (theme, statusCode) => {
+ const ResponseMeta = ({ code, statusText, duration, size }) => {
+   const { theme } = useTheme();
+   const sizeLabel = typeof size === 'number' ? formatSize(size) : null;
+-  const hasCode = code != null;
++  const hasCode = code !== null && code !== undefined;
+   const hasAny = hasCode || statusText || (typeof duration === 'number') || sizeLabel;
+   if (!hasAny) return null;
+   return (
+@@ -42,7 +42,8 @@ const ResponseMeta = ({ code, statusText, duration, size }) => {
+ };
+ 
+ const Response = ({ collection, response, item }) => {
+-  let { status, statusCode, statusText, dataBuffer, headers, data, error, duration, size } = response || {};
++  const { status, statusCode, statusText, headers, data, error, duration, size } = response || {};
++  let { dataBuffer } = response || {};
+   if (!dataBuffer) {
+     dataBuffer = Buffer.from(safeStringifyJSONIfNotString(data))?.toString('base64');
+   }
+@@ -55,7 +56,7 @@ const Response = ({ collection, response, item }) => {
+         duration={duration}
+         size={size}
+       />
+-      <Headers headers={headers} variant="response" />
++      <Headers headers={headers} type="response" />
+       <BodyBlock
+         collection={collection}
+         data={data}
+diff --git a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/index.js b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/index.js
+index 925d7b65e..c0fc5f746 100644
+--- a/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/Timeline/TimelineItem/index.js
+@@ -215,7 +215,7 @@ const TimelineItem = ({
+               )}
+               {showNetworkLogs && visitedTabs.network && (
+                 <div style={{ display: activeTab === 'network' ? 'block' : 'none' }}>
+-                  <Network logs={response?.timeline} />
++                  <Network logs={response?.timeline} showCopy={true} />
+                 </div>
+               )}
+             </div>
+diff --git a/packages/bruno-app/src/components/ResponsePane/copyForAIPayload.js b/packages/bruno-app/src/components/ResponsePane/copyForAIPayload.js
+new file mode 100644
+index 000000000..6157cd4d2
+--- /dev/null
++++ b/packages/bruno-app/src/components/ResponsePane/copyForAIPayload.js
+@@ -0,0 +1,9 @@
++export const buildSelectedRequestForResponseActions = ({ item, collection }) => ({
++  itemUid: item.uid,
++  collectionUid: collection.uid,
++  timestamp: item.timestamp,
++  data: {
++    request: item.request,
++    response: item.response || {}
++  }
++});
+diff --git a/packages/bruno-app/src/components/ResponsePane/index.js b/packages/bruno-app/src/components/ResponsePane/index.js
+index eea06d16e..602da8370 100644
+--- a/packages/bruno-app/src/components/ResponsePane/index.js
++++ b/packages/bruno-app/src/components/ResponsePane/index.js
+@@ -24,6 +24,7 @@ import HeightBoundContainer from 'ui/HeightBoundContainer';
+ import ResponseStopWatch from 'components/ResponsePane/ResponseStopWatch';
+ import WSMessagesList from './WsResponsePane/WSMessagesList';
+ import ResponsiveTabs from 'ui/ResponsiveTabs';
++import { buildSelectedRequestForResponseActions } from './copyForAIPayload';
+ 
+ // Width threshold for expanded right-side action buttons
+ const RIGHT_CONTENT_EXPANDED_WIDTH = 135;
+@@ -274,6 +275,7 @@ const ResponsePane = ({ item, collection }) => {
+           <ResponsePaneActions
+             item={item}
+             collection={collection}
++            selectedRequest={buildSelectedRequestForResponseActions({ item, collection })}
+             responseSize={responseSize}
+             selectedFormat={selectedFormat}
+             selectedTab={selectedViewTab}
+diff --git a/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.js b/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.js
+index 1f020d32d..f6b4f7667 100644
+--- a/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.js
++++ b/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.js
+@@ -5,7 +5,7 @@ import {
+   updateResponseExample,
+   cloneResponseExample
+ } from 'providers/ReduxStore/slices/collections';
+-import { saveRequest } from 'providers/ReduxStore/slices/collections/actions';
++import { saveRequest, useResponseExampleInRequest } from 'providers/ReduxStore/slices/collections/actions';
+ import { insertTaskIntoQueue } from 'providers/ReduxStore/slices/app';
+ import { uuid } from 'utils/common';
+ import { IconDots, IconEdit, IconCopy, IconTrash, IconCode } from '@tabler/icons';
+@@ -13,13 +13,13 @@ import ExampleIcon from 'components/Icons/ExampleIcon';
+ import range from 'lodash/range';
+ import classnames from 'classnames';
+ import MenuDropdown from 'ui/MenuDropdown';
+-import ActionIcon from 'ui/ActionIcon';
+ import Modal from 'components/Modal';
+ import DeleteResponseExampleModal from './DeleteResponseExampleModal';
+ import GenerateCodeItem from '../GenerateCodeItem';
+ import toast from 'react-hot-toast';
+ import StyledWrapper from './StyledWrapper';
+ import { useSidebarAccordion } from 'components/Sidebar/SidebarAccordionContext';
++import { hasAnyExampleChanges, hasRequestTransportChanges } from 'utils/collections';
+ 
+ const ExampleItem = ({ example, item, collection }) => {
+   const { dropdownContainerRef } = useSidebarAccordion();
+@@ -30,8 +30,10 @@ const ExampleItem = ({ example, item, collection }) => {
+   const [showRenameModal, setShowRenameModal] = useState(false);
+   const [showDeleteModal, setShowDeleteModal] = useState(false);
+   const [generateCodeItemModalOpen, setGenerateCodeItemModalOpen] = useState(false);
++  const [showReplaceRequestModal, setShowReplaceRequestModal] = useState(false);
+   const exampleRef = useRef(null);
+   const menuDropdownRef = useRef(null);
++  const replaceRequestModalOpenRef = useRef(false);
+ 
+   // Calculate indentation: item depth + 1 for examples
+   const indents = range((item.depth || 0) + 1);
+@@ -118,6 +120,46 @@ const ExampleItem = ({ example, item, collection }) => {
+     }
+   };
+ 
++  const applyExampleToRequest = async () => {
++    const result = await dispatch(useResponseExampleInRequest({
++      itemUid: item.uid,
++      collectionUid: collection.uid,
++      exampleUid: example.uid
++    }));
++
++    if (!result?.applied) {
++      if (result?.reason === 'unsaved-example-edits') {
++        toast.error('Save or cancel example edits before using an example.');
++      } else if (result?.reason === 'unsupported-example') {
++        toast.error('Only HTTP examples can be used in a request.');
++      } else if (result?.reason === 'not-applicable') {
++        toast.error('This example does not contain a request to use.');
++      }
++      return;
++    }
++
++    toast.success(`Request filled from example "${example.name}"`);
++  };
++
++  const handleTryExample = () => {
++    if (item.type !== 'http-request' || example.type !== 'http-request') {
++      return;
++    }
++
++    if (hasAnyExampleChanges(item)) {
++      toast.error('Save or cancel example edits before using an example.');
++      return;
++    }
++
++    if (hasRequestTransportChanges(item)) {
++      replaceRequestModalOpenRef.current = true;
++      setShowReplaceRequestModal(true);
++      return;
++    }
++
++    applyExampleToRequest();
++  };
++
+   const handleRenameConfirm = (newName) => {
+     // Find the example index in the original examples array
+     dispatch(updateResponseExample({
+@@ -137,7 +179,13 @@ const ExampleItem = ({ example, item, collection }) => {
+ 
+   // Build menu items for MenuDropdown
+   const buildMenuItems = () => {
+-    return [
++    const menuItems = [
++      ...(item.type === 'http-request' && example.type === 'http-request' ? [{
++        id: 'try',
++        label: 'Try',
++        onClick: handleTryExample,
++        testId: 'response-example-try-option'
++      }, { id: 'separator-use-example', type: 'divider' }] : []),
+       {
+         id: 'rename',
+         leftSection: IconEdit,
+@@ -169,6 +217,8 @@ const ExampleItem = ({ example, item, collection }) => {
+         testId: 'response-example-delete-option'
+       }
+     ];
++
++    return menuItems;
+   };
+ 
+   // Handle right-click context menu
+@@ -273,6 +323,34 @@ const ExampleItem = ({ example, item, collection }) => {
+           exampleUid={example.uid}
+         />
+       )}
++
++      {showReplaceRequestModal && (
++        <Modal
++          size="sm"
++          title="Replace request values?"
++          confirmText="Replace"
++          cancelText="Cancel"
++          closeModalFadeTimeout={0}
++          onCloseInitiated={() => {
++            replaceRequestModalOpenRef.current = false;
++          }}
++          handleCancel={() => {
++            replaceRequestModalOpenRef.current = false;
++            setShowReplaceRequestModal(false);
++          }}
++          handleConfirm={() => {
++            if (!replaceRequestModalOpenRef.current) {
++              return;
++            }
++            replaceRequestModalOpenRef.current = false;
++            setShowReplaceRequestModal(false);
++            applyExampleToRequest();
++          }}
++          dataTestId="replace-request-from-example-modal"
++        >
++          <p>Your unsaved method, URL, parameters, headers, and body will be replaced by this example.</p>
++        </Modal>
++      )}
+     </StyledWrapper>
+   );
+ };
+diff --git a/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.spec.js b/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.spec.js
+new file mode 100644
+index 000000000..4d92cbd58
+--- /dev/null
++++ b/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.spec.js
+@@ -0,0 +1,76 @@
++/**
++ * @jest-environment jsdom
++ */
++import '@testing-library/jest-dom';
++import React from 'react';
++import { fireEvent, render, screen } from '@testing-library/react';
++
++const mockDispatch = jest.fn();
++const mockUseResponseExampleInRequest = jest.fn((payload) => () => ({ applied: true, payload }));
++
++jest.mock('react-redux', () => ({
++  useDispatch: () => mockDispatch,
++  useSelector: () => null
++}));
++
++jest.mock('providers/ReduxStore/slices/tabs', () => ({
++  addTab: jest.fn(),
++  makeTabPermanent: jest.fn()
++}));
++
++jest.mock('providers/ReduxStore/slices/collections', () => ({
++  updateResponseExample: jest.fn(),
++  cloneResponseExample: jest.fn()
++}));
++
++jest.mock('providers/ReduxStore/slices/collections/actions', () => ({
++  saveRequest: jest.fn(),
++  useResponseExampleInRequest: (payload) => mockUseResponseExampleInRequest(payload)
++}));
++
++jest.mock('providers/ReduxStore/slices/app', () => ({ insertTaskIntoQueue: jest.fn() }));
++jest.mock('components/Sidebar/SidebarAccordionContext', () => ({ useSidebarAccordion: () => ({ dropdownContainerRef: { current: null } }) }));
++jest.mock('ui/MenuDropdown', () => ({ items }) => (
++  <div>{items.filter((item) => item.type !== 'divider').map((item) => <button key={item.id} data-testid={item.testId} onClick={item.onClick}>{item.label}</button>)}</div>
++));
++jest.mock('react-hot-toast', () => ({ success: jest.fn(), error: jest.fn() }));
++jest.mock('./StyledWrapper', () => {
++  const mockReact = require('react');
++  return mockReact.forwardRef(({ children, ...props }, ref) => <div ref={ref} {...props}>{children}</div>);
++});
++jest.mock('components/Icons/ExampleIcon', () => () => <span />);
++jest.mock('ui/ActionIcon', () => () => <span />);
++jest.mock('components/Modal', () => () => <div />);
++jest.mock('./DeleteResponseExampleModal', () => () => <div />);
++jest.mock('../GenerateCodeItem', () => () => <div />);
++
++import ExampleItem from './index';
++
++const collection = { uid: 'collection-1' };
++const example = { uid: 'example-1', type: 'http-request', name: 'Created user', request: {} };
++const item = { uid: 'request-1', type: 'http-request', name: 'Create user', depth: 1, pathname: '/requests/create-user.bru', examples: [example] };
++
++describe('ExampleItem', () => {
++  beforeEach(() => {
++    mockDispatch.mockClear();
++    mockUseResponseExampleInRequest.mockClear();
++    mockDispatch.mockImplementation((action) => (typeof action === 'function' ? action(mockDispatch) : action));
++  });
++
++  it('adds Try to an HTTP example context menu only', () => {
++    const { rerender } = render(<ExampleItem item={item} collection={collection} example={example} />);
++
++    expect(screen.getByTestId('response-example-try-option')).toHaveTextContent('Try');
++
++    fireEvent.click(screen.getByTestId('response-example-try-option'));
++    expect(mockUseResponseExampleInRequest).toHaveBeenCalledWith({
++      itemUid: 'request-1',
++      collectionUid: 'collection-1',
++      exampleUid: 'example-1'
++    });
++
++    rerender(<ExampleItem item={{ ...item, type: 'grpc-request' }} collection={collection} example={example} />);
++
++    expect(screen.queryByTestId('response-example-try-option')).not.toBeInTheDocument();
++  });
++});
+diff --git a/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/index.js b/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/index.js
+index 0d4335609..156cfd783 100644
+--- a/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/index.js
++++ b/packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/index.js
+@@ -41,7 +41,7 @@ import RunCollectionItem from './RunCollectionItem';
+ import GenerateCodeItem from './GenerateCodeItem';
+ import { isItemARequest, isItemAFolder, scrollToTheActiveTab } from 'utils/tabs';
+ import { doesRequestMatchSearchText, doesFolderHaveItemsMatchSearchText } from 'utils/collections/search';
+-import { getDefaultRequestPaneTab, getItemTypeLabel } from 'utils/collections';
++import { getDefaultRequestPaneTab, getItemTypeLabel, sortExamplesForSidebar } from 'utils/collections';
+ import toast from 'react-hot-toast';
+ import StyledWrapper from './StyledWrapper';
+ import NetworkError from 'components/ResponsePane/NetworkError/index';
+@@ -882,7 +882,7 @@ const CollectionItem = ({ item, collectionUid, collectionPathname, searchText, o
+       {/* Show examples when expanded (only for HTTP requests) */}
+       {isItemARequest(item) && item.type === 'http-request' && examplesExpanded && hasExamples && (
+         <div>
+-          {(item.examples || []).map((example, index) => {
++          {sortExamplesForSidebar(item.examples || [], collectionSortOrder).map((example, index) => {
+             return (
+               <ExampleItem
+                 key={example.uid || index}
+diff --git a/packages/bruno-app/src/components/Sidebar/ImportCollectionLocation/index.js b/packages/bruno-app/src/components/Sidebar/ImportCollectionLocation/index.js
+index def0de4c1..a71ab4c90 100644
+--- a/packages/bruno-app/src/components/Sidebar/ImportCollectionLocation/index.js
++++ b/packages/bruno-app/src/components/Sidebar/ImportCollectionLocation/index.js
+@@ -119,7 +119,6 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
+   const isZipImport = format === 'bruno-zip';
+   const isOpenApiFromUrl = isOpenApi && !!sourceUrl && !filePath;
+   const isOpenApiFromFile = isOpenApi && !!filePath && !sourceUrl;
+-  const isSwagger2 = isOpenApi && rawData?.swagger && String(rawData.swagger).startsWith('2');
+   const showCheckForSpecUpdatesOption = isOpenApiFromUrl || isOpenApiFromFile;
+ 
+   const { workspaces, activeWorkspaceUid } = useSelector((state) => state.workspaces);
+@@ -410,23 +409,20 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
+               </div>
+             )}
+             {showCheckForSpecUpdatesOption && (
+-              <label className={`mt-4 flex items-start gap-2 ${isSwagger2 ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
+-                <input
+-                  type="checkbox"
+-                  checked={isSwagger2 ? false : enableCheckForSpecUpdates}
+-                  onChange={(e) => setEnableCheckForSpecUpdates(e.target.checked)}
+-                  disabled={isSwagger2}
+-                  className={`checkbox mt-0.5 ${isSwagger2 ? '' : 'cursor-pointer'}`}
+-                />
+-                <div>
+-                  <span className="checkbox-option-label">Check for Spec Updates</span>
+-                  <p className="checkbox-option-description">
+-                    {isSwagger2
+-                      ? 'OpenAPI Sync is not supported for Swagger 2.0 specs.'
+-                      : 'Stay notified of spec changes and sync your collection with the spec.'}
+-                  </p>
+-                </div>
+-              </label>
++              <div className="mt-4">
++                <label className="flex items-center gap-2 cursor-pointer">
++                  <input
++                    type="checkbox"
++                    checked={enableCheckForSpecUpdates}
++                    onChange={(e) => setEnableCheckForSpecUpdates(e.target.checked)}
++                    className="checkbox cursor-pointer"
++                  />
++                  <span className="font-medium">Check for Spec Updates</span>
++                </label>
++                <p className="text-muted text-xs mt-1">
++                  Stay notified of spec changes and sync your collection with the spec.
++                </p>
++              </div>
+             )}
+           </form>
+         </Modal>
+diff --git a/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.js b/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.js
+index 1665cc193..aed12f887 100644
+--- a/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.js
++++ b/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.js
+@@ -22,6 +22,7 @@ import {
+   refreshUidsInItem,
+   isItemARequest,
+   getAllVariables,
++  hasAnyExampleChanges,
+   transformRequestToSaveToFilesystem,
+   transformCollectionRootToSave,
+   resolveEnabledVariable,
+@@ -75,6 +76,7 @@ import {
+   _clearScriptCollectionBaselines,
+   addTransientDirectory,
+   addSaveTransientRequestModal,
++  applyResponseExampleToRequest,
+   updatePathParam,
+   toggleCollection,
+   setSidebarSelection
+@@ -734,6 +736,42 @@ export const sendRequest = (item, collectionUid) => (dispatch, getState) => {
+   });
+ };
+ 
++export const useResponseExampleInRequest = ({ itemUid, collectionUid, exampleUid }) => (dispatch, getState) => {
++  const collection = findCollectionByUid(getState().collections.collections, collectionUid);
++  const item = collection ? findItemInCollection(collection, itemUid) : null;
++  const examples = item?.draft?.examples || item?.examples || [];
++  const example = examples.find((entry) => entry.uid === exampleUid);
++
++  if (!item || item.type !== 'http-request' || !example || example.type !== 'http-request') {
++    return { applied: false, reason: 'unsupported-example' };
++  }
++
++  if (!example.request || typeof example.request !== 'object') {
++    return { applied: false, reason: 'not-applicable' };
++  }
++
++  if (hasAnyExampleChanges(item)) {
++    return { applied: false, reason: 'unsaved-example-edits' };
++  }
++
++  dispatch(applyResponseExampleToRequest({ itemUid, collectionUid, exampleUid }));
++
++  const updatedCollection = findCollectionByUid(getState().collections.collections, collectionUid);
++  const updatedItem = updatedCollection ? findItemInCollection(updatedCollection, itemUid) : null;
++  if (!updatedItem) {
++    return { applied: false, reason: 'request-not-found' };
++  }
++
++  dispatch(addTab({
++    uid: updatedItem.uid,
++    collectionUid,
++    type: updatedItem.type,
++    pathname: updatedItem.pathname
++  }));
++
++  return { applied: true, item: updatedItem };
++};
++
+ export const cancelRequest = (cancelTokenUid, item, collection) => (dispatch) => {
+   return cancelNetworkRequest(cancelTokenUid)
+     .then(() => {
+diff --git a/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.use-response-example.spec.js b/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.use-response-example.spec.js
+new file mode 100644
+index 000000000..422ac7831
+--- /dev/null
++++ b/packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.use-response-example.spec.js
+@@ -0,0 +1,150 @@
++jest.mock('utils/network/index', () => ({
++  cancelNetworkRequest: jest.fn(),
++  connectWS: jest.fn(),
++  sendGrpcRequest: jest.fn(),
++  sendNetworkRequest: jest.fn(),
++  sendWsRequest: jest.fn()
++}));
++
++jest.mock('nanoid', () => ({
++  customAlphabet: () => () => 'generated-uid'
++}));
++
++import collectionsReducer from './index';
++import { useResponseExampleInRequest } from './actions';
++import { sendNetworkRequest } from 'utils/network/index';
++import tabsReducer from '../tabs';
++
++const collectionUid = 'collection-1';
++const itemUid = 'request-1';
++const exampleUid = 'example-1';
++
++const makeItem = () => ({
++  uid: itemUid,
++  type: 'http-request',
++  pathname: '/requests/create-user.bru',
++  request: {
++    method: 'GET',
++    url: 'https://saved.example.test/users',
++    headers: [],
++    params: [],
++    body: { mode: 'none' },
++    auth: { mode: 'bearer', token: 'parent-token' }
++  },
++  examples: [{
++    uid: exampleUid,
++    type: 'http-request',
++    name: 'Created user',
++    request: {
++      method: 'POST',
++      url: 'https://example.test/users',
++      headers: [{ uid: 'example-header', name: 'Content-Type', value: 'application/json', enabled: true }],
++      params: [],
++      body: { mode: 'json', json: '{"name":"Ada"}' }
++    },
++    response: { status: 201, body: '{"id":1}' }
++  }]
++});
++
++const makeState = (item = makeItem()) => ({
++  collections: {
++    collections: [{
++      uid: collectionUid,
++      activeEnvironmentUid: null,
++      environments: [],
++      runtimeVariables: {},
++      items: [item]
++    }],
++    collectionSortOrder: 'default',
++    activeConnections: [],
++    tempDirectories: {},
++    saveTransientRequestModals: [],
++    mockResponseEditors: {}
++  },
++  globalEnvironments: {
++    globalEnvironments: [],
++    activeGlobalEnvironmentUid: null
++  },
++  tabs: { tabs: [], activeTabUid: null, recentlyClosedTabs: [] }
++});
++
++const createStoreHarness = (initialState) => {
++  let state = initialState;
++  const getState = () => state;
++  const dispatch = (action) => {
++    if (typeof action === 'function') {
++      return action(dispatch, getState);
++    }
++    state = {
++      ...state,
++      collections: collectionsReducer(state.collections, action),
++      tabs: tabsReducer(state.tabs, action)
++    };
++    return action;
++  };
++
++  return { dispatch, getState };
++};
++
++describe('useResponseExampleInRequest', () => {
++  beforeEach(() => {
++    sendNetworkRequest.mockReset();
++  });
++
++  it('applies the snapshot without sending and focuses the parent request tab', async () => {
++    const { dispatch, getState } = createStoreHarness(makeState());
++
++    const result = await dispatch(useResponseExampleInRequest({
++      collectionUid,
++      itemUid,
++      exampleUid
++    }));
++
++    expect(result.applied).toBe(true);
++    expect(sendNetworkRequest).not.toHaveBeenCalled();
++    expect(getState().tabs.activeTabUid).toBe(itemUid);
++    expect(getState().collections.collections[0].items[0]).toMatchObject({
++      request: { method: 'GET', url: 'https://saved.example.test/users' },
++      draft: { request: { method: 'POST', url: 'https://example.test/users' } }
++    });
++  });
++
++  it('does not persist the parent request while trying an example', async () => {
++    const { dispatch, getState } = createStoreHarness(makeState());
++
++    const result = await dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid }));
++
++    expect(result.applied).toBe(true);
++    expect(sendNetworkRequest).not.toHaveBeenCalled();
++    expect(getState().collections.collections[0].items[0]).toMatchObject({
++      request: { method: 'GET', url: 'https://saved.example.test/users' },
++      draft: { request: { method: 'POST', url: 'https://example.test/users' } }
++    });
++  });
++
++  it('refuses to use an example when another example has unsaved changes', async () => {
++    const item = makeItem();
++    item.draft = {
++      ...item,
++      examples: [{ ...item.examples[0], name: 'Unsaved name' }]
++    };
++    const { dispatch } = createStoreHarness(makeState(item));
++
++    const result = await dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid }));
++
++    expect(result).toEqual({ applied: false, reason: 'unsaved-example-edits' });
++    expect(sendNetworkRequest).not.toHaveBeenCalled();
++  });
++
++  it('does not apply or send an HTTP example that has no request snapshot', async () => {
++    const item = makeItem();
++    item.examples[0] = { ...item.examples[0], request: undefined };
++    const { dispatch, getState } = createStoreHarness(makeState(item));
++
++    const result = await dispatch(useResponseExampleInRequest({ collectionUid, itemUid, exampleUid }));
++
++    expect(result).toEqual({ applied: false, reason: 'not-applicable' });
++    expect(sendNetworkRequest).not.toHaveBeenCalled();
++    expect(getState().collections.collections[0].items[0].draft).toBeUndefined();
++  });
++});
+diff --git a/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.js b/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.js
+index 54fa98f4b..51c18a91c 100644
+--- a/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.js
++++ b/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.js
+@@ -9,6 +9,57 @@ import { findItemForExampleEditor,
+ import { parsePathParams, splitOnFirst } from 'utils/url';
+ import statusCodePhraseMap from 'components/ResponsePane/StatusCode/get-status-code-phrase';
+ 
++const cloneRequestRowsWithNewUids = (rows) => {
++  if (!Array.isArray(rows)) {
++    return cloneDeep(rows);
++  }
++
++  return rows.map((row) => ({
++    ...cloneDeep(row),
++    uid: uuid()
++  }));
++};
++
++const cloneExampleTransportRequest = (request = {}) => {
++  const body = cloneDeep(request.body);
++
++  if (body) {
++    ['formUrlEncoded', 'multipartForm', 'file'].forEach((field) => {
++      if (Array.isArray(body[field])) {
++        body[field] = cloneRequestRowsWithNewUids(body[field]);
++      }
++    });
++  }
++
++  return {
++    method: request.method,
++    url: request.url,
++    headers: cloneRequestRowsWithNewUids(request.headers),
++    params: cloneRequestRowsWithNewUids(request.params),
++    body
++  };
++};
++
++export const applyResponseExampleToRequest = (state, action) => {
++  const { itemUid, collectionUid, exampleUid } = action.payload;
++  const item = findItemForExampleEditor(state, collectionUid, itemUid);
++
++  if (!item || item.type !== 'http-request') return;
++
++  const examples = item.draft?.examples || item.examples || [];
++  const example = examples.find((entry) => entry.uid === exampleUid);
++  if (!example?.request || example.type !== 'http-request') return;
++
++  if (!item.draft) {
++    item.draft = cloneDeep(item);
++  }
++
++  item.draft.request = {
++    ...item.draft.request,
++    ...cloneExampleTransportRequest(example.request)
++  };
++};
++
+ export const addResponseExample = (state, action) => {
+   const { itemUid, collectionUid, example } = action.payload;
+   const item = findItemForExampleEditor(state, collectionUid, itemUid);
+diff --git a/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.spec.js b/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.spec.js
+new file mode 100644
+index 000000000..31e0022e4
+--- /dev/null
++++ b/packages/bruno-app/src/providers/ReduxStore/slices/collections/exampleReducers.spec.js
+@@ -0,0 +1,146 @@
++jest.mock('nanoid', () => ({
++  customAlphabet: () => () => 'generated-uid'
++}));
++
++import { collectionsSlice } from './index';
++
++const { applyResponseExampleToRequest } = collectionsSlice.actions;
++const reducer = collectionsSlice.reducer;
++
++const makeState = (item) => ({
++  collections: [{ uid: 'collection-1', items: [item] }]
++});
++
++describe('applyResponseExampleToRequest', () => {
++  it('lets an HTTP request use an example transport snapshot without changing its execution configuration', () => {
++    const item = {
++      uid: 'request-1',
++      type: 'http-request',
++      name: 'Parent request',
++      request: {
++        method: 'GET',
++        url: 'https://saved.example.test',
++        headers: [{ uid: 'saved-header', name: 'X-Saved', value: 'saved', enabled: true }],
++        params: [{ uid: 'saved-param', name: 'saved', value: 'true', type: 'query', enabled: true }],
++        body: { mode: 'json', json: '{"saved":true}' },
++        auth: { mode: 'bearer', token: 'parent-token' },
++        script: { req: 'request script', res: 'response script' },
++        vars: { req: [{ uid: 'parent-var', name: 'host', value: 'saved.example.test' }], res: [] },
++        assertions: [{ uid: 'parent-assertion', expression: 'expect(res.status).to.equal(200)' }]
++      },
++      settings: { encodeUrl: true },
++      docs: 'Keep this documentation',
++      examples: [{
++        uid: 'example-1',
++        name: 'Created user',
++        type: 'http-request',
++        request: {
++          method: 'POST',
++          url: 'https://example.test/users',
++          headers: [{ uid: 'example-header', name: 'Content-Type', value: 'application/json', enabled: true }],
++          params: [{ uid: 'example-param', name: 'verbose', value: '1', type: 'query', enabled: true }],
++          body: {
++            mode: 'multipartForm',
++            multipartForm: [{ uid: 'example-multipart', name: 'avatar', value: '/tmp/avatar.png', type: 'file', enabled: true }],
++            formUrlEncoded: [{ uid: 'example-form', name: 'role', value: 'admin', enabled: true }],
++            file: [{ uid: 'example-file', filePath: '/tmp/avatar.png', contentType: 'image/png', enabled: true }]
++          }
++        },
++        response: { status: 201, body: '{"id":1}' }
++      }]
++    };
++    item.draft = {
++      ...item,
++      request: {
++        ...item.request,
++        auth: { mode: 'bearer', token: 'unsaved-parent-token' },
++        docs: 'Unsaved parent-only field'
++      }
++    };
++
++    const next = reducer(
++      makeState(item),
++      applyResponseExampleToRequest({ collectionUid: 'collection-1', itemUid: 'request-1', exampleUid: 'example-1' })
++    );
++    const updated = next.collections[0].items[0];
++
++    expect(updated.draft.request).toMatchObject({
++      method: 'POST',
++      url: 'https://example.test/users',
++      headers: [{ name: 'Content-Type', value: 'application/json', enabled: true }],
++      params: [{ name: 'verbose', value: '1', type: 'query', enabled: true }],
++      body: { mode: 'multipartForm', multipartForm: [{ name: 'avatar', value: '/tmp/avatar.png', type: 'file', enabled: true }] },
++      auth: { mode: 'bearer', token: 'unsaved-parent-token' },
++      script: { req: 'request script', res: 'response script' },
++      vars: { req: [{ uid: 'parent-var', name: 'host', value: 'saved.example.test' }], res: [] },
++      assertions: [{ uid: 'parent-assertion', expression: 'expect(res.status).to.equal(200)' }],
++      docs: 'Unsaved parent-only field'
++    });
++    expect(updated.draft.request.headers[0].uid).not.toBe('example-header');
++    expect(updated.draft.request.params[0].uid).not.toBe('example-param');
++    expect(updated.draft.request.body.multipartForm[0].uid).not.toBe('example-multipart');
++    expect(updated.draft.request.body.formUrlEncoded[0].uid).not.toBe('example-form');
++    expect(updated.draft.request.body.file[0].uid).not.toBe('example-file');
++    expect(updated.draft.examples[0].response).toEqual({ status: 201, body: '{"id":1}' });
++    expect(updated.draft.examples[0].request.headers[0].uid).toBe('example-header');
++
++    expect(updated.draft.request.headers[0]).not.toBe(updated.draft.examples[0].request.headers[0]);
++  });
++
++  it('does not apply an example to a non-HTTP request', () => {
++    const item = {
++      uid: 'grpc-request-1',
++      type: 'grpc-request',
++      request: { url: 'grpc://saved.example.test' },
++      examples: [{
++        uid: 'example-1',
++        type: 'grpc-request',
++        request: { url: 'grpc://example.test' }
++      }]
++    };
++
++    const next = reducer(
++      makeState(item),
++      applyResponseExampleToRequest({ collectionUid: 'collection-1', itemUid: 'grpc-request-1', exampleUid: 'example-1' })
++    );
++
++    expect(next.collections[0].items[0].draft).toBeUndefined();
++    expect(next.collections[0].items[0].request.url).toBe('grpc://saved.example.test');
++  });
++
++  it('does not apply a non-HTTP example to an HTTP request', () => {
++    const item = {
++      uid: 'request-1',
++      type: 'http-request',
++      request: { method: 'GET', url: 'https://saved.example.test' },
++      examples: [{
++        uid: 'grpc-example-1',
++        type: 'grpc-request',
++        request: { method: 'POST', url: 'grpc://example.test' }
++      }]
++    };
++
++    const next = reducer(
++      makeState(item),
++      applyResponseExampleToRequest({ collectionUid: 'collection-1', itemUid: 'request-1', exampleUid: 'grpc-example-1' })
++    );
++
++    expect(next.collections[0].items[0].draft).toBeUndefined();
++  });
++
++  it('does not create a draft for an HTTP example without a request snapshot', () => {
++    const item = {
++      uid: 'request-1',
++      type: 'http-request',
++      request: { method: 'GET', url: 'https://saved.example.test' },
++      examples: [{ uid: 'example-1', type: 'http-request' }]
++    };
++
++    const next = reducer(
++      makeState(item),
++      applyResponseExampleToRequest({ collectionUid: 'collection-1', itemUid: 'request-1', exampleUid: 'example-1' })
++    );
++
++    expect(next.collections[0].items[0].draft).toBeUndefined();
++  });
++});
+diff --git a/packages/bruno-app/src/providers/ReduxStore/slices/collections/index.js b/packages/bruno-app/src/providers/ReduxStore/slices/collections/index.js
+index 208b34fec..170a108bc 100644
+--- a/packages/bruno-app/src/providers/ReduxStore/slices/collections/index.js
++++ b/packages/bruno-app/src/providers/ReduxStore/slices/collections/index.js
+@@ -4163,6 +4163,7 @@ export const collectionsSlice = createSlice({
+       state.saveTransientRequestModals = [];
+     },
+     /* Response Example Actions */
++    applyResponseExampleToRequest: exampleReducers.applyResponseExampleToRequest,
+     addResponseExample: exampleReducers.addResponseExample,
+     cloneResponseExample: exampleReducers.cloneResponseExample,
+     updateResponseExample: exampleReducers.updateResponseExample,
+@@ -4390,6 +4391,7 @@ export const {
+   setLastClickedSidebarUid,
+ 
+   /* Response Example Actions - Start */
++  applyResponseExampleToRequest,
+   addResponseExample,
+   cloneResponseExample,
+   updateResponseExample,
+diff --git a/packages/bruno-app/src/utils/collections/index.js b/packages/bruno-app/src/utils/collections/index.js
+index efb3eba23..64e178d58 100644
+--- a/packages/bruno-app/src/utils/collections/index.js
++++ b/packages/bruno-app/src/utils/collections/index.js
+@@ -963,6 +963,28 @@ export const sortItemsBySidebarOrder = (items = []) => {
+   );
+ };
+ 
++/**
++ * Orders a request's response examples for display in the sidebar, following the
++ * collection sort mode ('alphabetical' / 'reverseAlphabetical' / 'default').
++ *
++ * This is a view-only ordering: the source `item.examples` array is the on-disk order
++ * and must stay untouched, because `exampleIndex` (tab identity in tabs.js and the
++ * tasks middleware queue) is computed from positions in that source array.
++ */
++const exampleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
++
++export const sortExamplesForSidebar = (examples = [], sortOrder) => {
++  if (sortOrder === 'alphabetical') {
++    return [...examples].sort((a, b) => exampleCollator.compare(a.name || '', b.name || ''));
++  }
++
++  if (sortOrder === 'reverseAlphabetical') {
++    return [...examples].sort((a, b) => -exampleCollator.compare(a.name || '', b.name || ''));
++  }
++
++  return examples;
++};
++
+ export const humanizeRequestBodyMode = (mode) => {
+   let label = 'No Body';
+   switch (mode) {
+@@ -1199,6 +1221,34 @@ export const hasExampleChanges = (_item, exampleUid) => {
+   return !isEqual(originalExample, draftExample);
+ };
+ 
++export const hasAnyExampleChanges = (item) => {
++  if (!item?.draft) {
++    return false;
++  }
++
++  const savedExamples = item.examples || [];
++  const draftExamples = item.draft.examples || [];
++
++  if (savedExamples.length !== draftExamples.length) {
++    return true;
++  }
++
++  return savedExamples.some((example) => (
++    !draftExamples.some((draftExample) => draftExample.uid === example.uid)
++    || hasExampleChanges(item, example.uid)
++  ));
++};
++
++export const hasRequestTransportChanges = (item) => {
++  if (!item?.draft) {
++    return false;
++  }
++
++  return ['method', 'url', 'headers', 'params', 'body'].some((field) => (
++    !isEqual(item.draft.request?.[field], item.request?.[field])
++  ));
++};
++
+ export const getDefaultRequestPaneTab = (item) => {
+   if (item.type === 'http-request') {
+     // If no params are enabled and body mode is set, default to 'body' tab
+diff --git a/packages/bruno-app/src/utils/collections/sort-examples-for-sidebar.spec.js b/packages/bruno-app/src/utils/collections/sort-examples-for-sidebar.spec.js
+new file mode 100644
+index 000000000..9c8db6ba1
+--- /dev/null
++++ b/packages/bruno-app/src/utils/collections/sort-examples-for-sidebar.spec.js
+@@ -0,0 +1,58 @@
++const { describe, it, expect } = require('@jest/globals');
++import { sortExamplesForSidebar } from './index';
++
++const examples = [
++  { uid: 'a', name: 'Banana' },
++  { uid: 'b', name: 'apple' },
++  { uid: 'c', name: 'Cherry' }
++];
++
++describe('sortExamplesForSidebar', () => {
++  it('sorts examples A-Z for alphabetical order', () => {
++    const result = sortExamplesForSidebar(examples, 'alphabetical');
++    expect(result.map((e) => e.name)).toEqual(['apple', 'Banana', 'Cherry']);
++  });
++
++  it('sorts examples Z-A for reverseAlphabetical order', () => {
++    const result = sortExamplesForSidebar(examples, 'reverseAlphabetical');
++    expect(result.map((e) => e.name)).toEqual(['Cherry', 'Banana', 'apple']);
++  });
++
++  it('keeps the original order for default order', () => {
++    const result = sortExamplesForSidebar(examples, 'default');
++    expect(result.map((e) => e.name)).toEqual(['Banana', 'apple', 'Cherry']);
++  });
++
++  it('returns an empty array for empty or missing examples', () => {
++    expect(sortExamplesForSidebar([], 'alphabetical')).toEqual([]);
++    expect(sortExamplesForSidebar(undefined, 'alphabetical')).toEqual([]);
++  });
++
++  it('sorts numeric names naturally (file-2 before file-10)', () => {
++    const result = sortExamplesForSidebar(
++      [
++        { uid: 'a', name: 'Example 10' },
++        { uid: 'b', name: 'Example 2' }
++      ],
++      'alphabetical'
++    );
++    expect(result.map((e) => e.name)).toEqual(['Example 2', 'Example 10']);
++  });
++
++  it('treats a missing name as an empty string', () => {
++    const result = sortExamplesForSidebar(
++      [
++        { uid: 'a', name: 'Beta' },
++        { uid: 'b' }
++      ],
++      'alphabetical'
++    );
++    expect(result.map((e) => e.name)).toEqual([undefined, 'Beta']);
++  });
++
++  it('does not mutate the input array', () => {
++    const input = [...examples].reverse();
++    sortExamplesForSidebar(input, 'alphabetical');
++    expect(input.map((e) => e.name)).toEqual(['Cherry', 'apple', 'Banana']);
++  });
++});
+diff --git a/packages/bruno-app/src/utils/response/debugContextMarkdown.js b/packages/bruno-app/src/utils/response/debugContextMarkdown.js
+new file mode 100644
+index 000000000..fcda2c613
+--- /dev/null
++++ b/packages/bruno-app/src/utils/response/debugContextMarkdown.js
+@@ -0,0 +1,404 @@
++import { safeParseJSON } from 'utils/common';
++
++const EMPTY_VALUE = '(none)';
++const DEFAULT_MAX_BODY_CHARS = 30000;
++
++const formatTimestamp = (timestamp) => {
++  if (!timestamp) return EMPTY_VALUE;
++  const date = new Date(timestamp);
++  if (Number.isNaN(date.getTime())) return EMPTY_VALUE;
++  return date.toISOString();
++};
++
++const truncateText = (text, maxChars = DEFAULT_MAX_BODY_CHARS) => {
++  const stringValue = String(text);
++  if (stringValue.length <= maxChars) return stringValue;
++
++  const headLength = Math.ceil(maxChars / 2);
++  const tailLength = Math.floor(maxChars / 2);
++  return [
++    stringValue.slice(0, headLength),
++    '',
++    `[TRUNCATED: ${stringValue.length - maxChars} characters omitted]`,
++    '',
++    stringValue.slice(stringValue.length - tailLength)
++  ].join('\n');
++};
++
++const normalizeHeaders = (headers) => {
++  if (!headers) return [];
++  if (Array.isArray(headers)) {
++    return headers
++      .filter((header) => header && header.name)
++      .map(({ name, value }) => ({ name: String(name), value: value === null || value === undefined ? '' : String(value) }));
++  }
++
++  return Object.entries(headers).map(([name, value]) => ({
++    name: String(name),
++    value: value === null || value === undefined ? '' : String(value)
++  }));
++};
++
++const formatHeaderLines = (headers) => {
++  const normalizedHeaders = normalizeHeaders(headers);
++  if (!normalizedHeaders.length) return EMPTY_VALUE;
++
++  return normalizedHeaders
++    .map(({ name, value }) => `- ${name}: ${value}`)
++    .join('\n');
++};
++
++const stringifyBody = (body, options = {}) => {
++  const { maxChars = DEFAULT_MAX_BODY_CHARS } = options;
++  if (body === null || body === undefined || body === '') return EMPTY_VALUE;
++  if (typeof body === 'string') {
++    const parsedBody = safeParseJSON(body);
++    if (parsedBody && typeof parsedBody === 'object') {
++      return truncateText(JSON.stringify(parsedBody, null, 2), maxChars);
++    }
++    return truncateText(body, maxChars);
++  }
++
++  try {
++    return truncateText(JSON.stringify(body, null, 2), maxChars);
++  } catch {
++    return truncateText(String(body), maxChars);
++  }
++};
++
++const quoteShellArg = (value) => {
++  const stringValue = value === null || value === undefined ? '' : String(value);
++  return `'${stringValue.replace(/'/g, `'\\''`)}'`;
++};
++
++const buildCurl = (request) => {
++  if (!request?.url) return EMPTY_VALUE;
++
++  const method = (request.method || 'GET').toUpperCase();
++  const segments = ['curl', '-X', method, quoteShellArg(request.url)];
++
++  normalizeHeaders(request.headers).forEach(({ name, value }) => {
++    segments.push('-H', quoteShellArg(`${name}: ${value}`));
++  });
++
++  if (request.data !== null && request.data !== undefined && request.data !== '') {
++    segments.push('--data-raw', quoteShellArg(stringifyBody(request.data)));
++  }
++
++  return segments.join(' ');
++};
++
++const extractAssertionDiff = (item) => {
++  const assertionResults = Array.isArray(item?.assertionResults) ? item.assertionResults : [];
++  const failedAssertionResults = assertionResults.filter((result) => result?.status === 'fail');
++  const enabledAssertions = Array.isArray(item?.request?.assertions)
++    ? item.request.assertions.filter((assertion) => assertion?.enabled !== false)
++    : [];
++
++  if (failedAssertionResults.length) {
++    return failedAssertionResults.map((result, index) => {
++      const title = result?.name || result?.message || `Assertion ${index + 1}`;
++      const detail = result?.error || result?.expected || result?.actual || result?.message || EMPTY_VALUE;
++      return `- Assertion mismatch: ${title}: ${detail}`;
++    }).join('\n');
++  }
++
++  if (assertionResults.length) {
++    return assertionResults.map((result, index) => {
++      const title = result?.name || result?.message || `Assertion ${index + 1}`;
++      return `- ${title}: ${result?.status || 'pass'}`;
++    }).join('\n');
++  }
++
++  if (enabledAssertions.length) {
++    return enabledAssertions.map((assertion, index) => {
++      const name = assertion?.name || `Assertion ${index + 1}`;
++      const operator = assertion?.operator || 'eq';
++      const value = assertion?.value ?? EMPTY_VALUE;
++      return `- ${name}: operator=${operator}, expected=${value}`;
++    }).join('\n');
++  }
++
++  return EMPTY_VALUE;
++};
++
++const parseTimeline = (timeline = []) => {
++  const parsed = {
++    requestLine: null,
++    requestHeaders: [],
++    requestBodyLines: [],
++    responseLine: null,
++    responseHeaders: [],
++    responseBodyLines: [],
++    info: [],
++    errors: []
++  };
++
++  let section = null;
++  for (const entry of timeline) {
++    const type = entry?.type;
++    const message = entry?.message;
++    if (!message || typeof message !== 'string') {
++      continue;
++    }
++
++    if (type === 'request') {
++      parsed.requestLine = parsed.requestLine || message;
++      section = 'request';
++      continue;
++    }
++
++    if (type === 'requestHeader') {
++      parsed.requestHeaders.push(message);
++      section = 'requestHeaders';
++      continue;
++    }
++
++    if (type === 'requestData') {
++      parsed.requestBodyLines.push(message);
++      section = 'requestBody';
++      continue;
++    }
++
++    if (type === 'response') {
++      parsed.responseLine = parsed.responseLine || message;
++      section = 'response';
++      continue;
++    }
++
++    if (type === 'responseHeader') {
++      parsed.responseHeaders.push(message);
++      section = 'responseHeaders';
++      continue;
++    }
++
++    if (type === 'info') {
++      parsed.info.push(message);
++      if (/Request completed in/i.test(message)) {
++        section = 'responseBody';
++      }
++      continue;
++    }
++
++    if (type === 'error') {
++      parsed.errors.push(message);
++      if (section === 'responseHeaders' || section === 'response') {
++        parsed.responseBodyLines.push(message);
++      }
++      continue;
++    }
++
++    if (section === 'requestBody') {
++      parsed.requestBodyLines.push(message);
++      continue;
++    }
++
++    if (section === 'responseHeaders' || section === 'responseBody') {
++      parsed.responseBodyLines.push(message);
++    }
++  }
++
++  return parsed;
++};
++
++const parseRequestLine = (requestLine) => {
++  if (!requestLine || typeof requestLine !== 'string') return {};
++  const match = requestLine.match(/^([A-Z]+)\s+(.+)$/);
++  if (!match) return {};
++  return {
++    method: match[1],
++    url: match[2]
++  };
++};
++
++const parseResponseLine = (responseLine) => {
++  if (!responseLine || typeof responseLine !== 'string') return {};
++  const match = responseLine.match(/^HTTP\/([0-9.]+)\s+(\d+)(?:\s+(.*))?$/i);
++  if (!match) return {};
++  return {
++    httpVersion: match[1],
++    statusCode: Number(match[2]),
++    statusText: match[3] || ''
++  };
++};
++
++const headerLinesToObject = (headerLines = []) => {
++  const headers = {};
++  headerLines.forEach((line) => {
++    const idx = line.indexOf(':');
++    if (idx <= 0) return;
++    const name = line.slice(0, idx).trim();
++    const value = line.slice(idx + 1).trim();
++    if (name) {
++      headers[name] = value;
++    }
++  });
++  return headers;
++};
++
++const tryParseStructuredText = (text) => {
++  const trimmed = String(text || '').trim();
++  if (!trimmed) return null;
++
++  const parsedJson = safeParseJSON(trimmed);
++  if (typeof parsedJson === 'object') {
++    return parsedJson;
++  }
++
++  return trimmed;
++};
++
++const parseStructuredFallback = ({ request, response, timeline }) => {
++  const parsedTimeline = parseTimeline(timeline);
++  const fallbackRequest = parseRequestLine(parsedTimeline.requestLine);
++  const fallbackResponse = parseResponseLine(parsedTimeline.responseLine);
++
++  return {
++    request: {
++      method: fallbackRequest.method || request?.method,
++      url: fallbackRequest.url || request?.url,
++      headers: parsedTimeline.requestHeaders.length
++        ? headerLinesToObject(parsedTimeline.requestHeaders)
++        : request?.headers,
++      data: parsedTimeline.requestBodyLines.length
++        ? tryParseStructuredText(parsedTimeline.requestBodyLines.join('\n'))
++        : request?.data
++    },
++    response: {
++      status: response?.status ?? fallbackResponse.statusCode,
++      statusCode: response?.statusCode ?? fallbackResponse.statusCode,
++      statusText: response?.statusText || fallbackResponse.statusText,
++      headers: response?.headers || headerLinesToObject(parsedTimeline.responseHeaders),
++      data: response?.data ?? tryParseStructuredText(parsedTimeline.responseBodyLines.join('\n')),
++      duration: response?.duration,
++      error: response?.error,
++      isError: response?.isError
++    },
++    parsedTimeline
++  };
++};
++
++const formatContextSection = ({ selectedRequest, request, response, collection, item }) => {
++  const lines = [
++    `- Collection: ${collection?.name || EMPTY_VALUE}`,
++    `- Request: ${item?.name || selectedRequest?.itemUid || EMPTY_VALUE}`,
++    `- Timestamp: ${formatTimestamp(selectedRequest?.timestamp || request?.timestamp)}`
++  ];
++
++  if (request?.url) {
++    lines.push(`- URL: ${request.url}`);
++  }
++
++  if (response?.statusCode || response?.status) {
++    lines.push(`- HTTP Status: ${response.statusCode || response.status}`);
++  }
++
++  if (response?.duration !== null && response?.duration !== undefined) {
++    lines.push(`- Duration: ${response.duration} ms`);
++  }
++
++  if (item?.request?.docs) {
++    lines.push(`- Request Docs: ${String(item.request.docs)}`);
++  }
++
++  return lines.join('\n');
++};
++
++const formatResponseStatus = (response, parsedTimeline) => {
++  const status = response?.statusCode || response?.status || EMPTY_VALUE;
++  const statusText = response?.statusText || parsedTimeline?.responseLine || '';
++  const duration = response?.duration !== null && response?.duration !== undefined ? `${response.duration} ms` : EMPTY_VALUE;
++
++  return [
++    `- Status: ${status}`,
++    `- Status Text: ${statusText || EMPTY_VALUE}`,
++    `- Duration: ${duration}`
++  ].join('\n');
++};
++
++const formatErrorSection = (response, parsedTimeline) => {
++  const messages = [];
++
++  if (response?.error) {
++    messages.push(`- Response Error: ${response.error}`);
++  }
++
++  parsedTimeline?.errors?.forEach((message) => {
++    messages.push(`- ${message}`);
++  });
++
++  return messages.length ? messages.join('\n') : EMPTY_VALUE;
++};
++
++const formatInstructionsSection = (response) => {
++  const status = Number(response?.statusCode || response?.status);
++  if (status >= 200 && status < 300) {
++    return [
++      '1. Review the API Debug Context and confirm the request target and response result.',
++      '2. Reproduce the request with cURL, then compare the response headers/body with the network log.',
++      '3. Verify the response contract, including expected fields, values, pagination, and data consistency.'
++    ].join('\n');
++  }
++
++  return [
++    '1. Review the API Debug Context and confirm the request target and failure symptoms.',
++    '2. Reproduce the request with cURL, then troubleshoot using the response headers/body and network errors.',
++    '3. Identify the most likely root cause, supporting evidence, and the next validation action.'
++  ].join('\n');
++};
++
++export const buildResponseDebugMarkdown = ({ selectedRequest, collection, item, maxBodyChars = DEFAULT_MAX_BODY_CHARS }) => {
++  const rawRequest = selectedRequest?.data?.request || {};
++  const rawResponse = selectedRequest?.data?.response || {};
++  const timeline = Array.isArray(rawResponse?.timeline) ? rawResponse.timeline : [];
++  const { request, response, parsedTimeline } = parseStructuredFallback({
++    request: rawRequest,
++    response: rawResponse,
++    timeline
++  });
++
++  return [
++    '# API Debug Context',
++    formatContextSection({ selectedRequest, request, response, collection, item }),
++    '',
++    '# Request (cURL)',
++    '```bash',
++    buildCurl(request),
++    '```',
++    '',
++    '## Request Headers',
++    formatHeaderLines(request.headers),
++    '',
++    '## Request Body',
++    '```',
++    stringifyBody(request.data, { maxChars: maxBodyChars }),
++    '```',
++    '',
++    '# Response',
++    formatResponseStatus(response, parsedTimeline),
++    '',
++    '## Response Headers',
++    formatHeaderLines(response.headers),
++    '',
++    '## Response Body',
++    '```',
++    stringifyBody(response.data, { maxChars: maxBodyChars }),
++    '```',
++    '',
++    '# Network / System Errors',
++    formatErrorSection(response, parsedTimeline),
++    '',
++    '# Response Validation',
++    extractAssertionDiff(item),
++    '',
++    '# Instructions',
++    formatInstructionsSection(response)
++  ].join('\n');
++};
++
++export const __testUtils__ = {
++  buildCurl,
++  extractAssertionDiff,
++  parseStructuredFallback,
++  stringifyBody
++};
+diff --git a/packages/bruno-app/src/utils/response/debugContextMarkdown.spec.js b/packages/bruno-app/src/utils/response/debugContextMarkdown.spec.js
+new file mode 100644
+index 000000000..19c0cdbb3
+--- /dev/null
++++ b/packages/bruno-app/src/utils/response/debugContextMarkdown.spec.js
+@@ -0,0 +1,188 @@
++import { buildResponseDebugMarkdown, __testUtils__ } from './debugContextMarkdown';
++
++describe('debugContextMarkdown', () => {
++  it('copies the executed request URL and complete debug data into Markdown', () => {
++    const selectedRequest = {
++      itemUid: 'req-1',
++      timestamp: 1722330000000,
++      data: {
++        request: {
++          method: 'DELETE',
++          url: '/%7B%7BbaseUrl%7D%7D/api/v1/workspaces/:workspaceId',
++          headers: {
++            Accept: 'application/json',
++            Authorization: 'Bearer stale-template-token'
++          }
++        },
++        response: {
++          status: 404,
++          statusCode: 404,
++          statusText: 'Not Found',
++          duration: 187,
++          headers: {
++            'content-type': 'application/json; charset=utf-8',
++            'x-request-id': 'req-404'
++          },
++          data: {
++            error: 'USER_NOT_FOUND',
++            message: 'User 42 not found',
++            token: 'response-token'
++          },
++          timeline: [
++            { type: 'request', message: 'DELETE https://api.example.com/v1/users/42?hard=true&access_token=query-token' },
++            { type: 'requestHeader', message: 'Accept: application/json' },
++            { type: 'requestHeader', message: 'Authorization: Bearer test-token' },
++            { type: 'response', message: 'HTTP/1.1 404 Not Found' },
++            { type: 'responseHeader', message: 'content-type: application/json; charset=utf-8' },
++            { type: 'responseHeader', message: 'x-request-id: req-404' },
++            { type: 'error', message: '{\"error\":\"USER_NOT_FOUND\",\"message\":\"User 42 not found\"}' }
++          ]
++        }
++      }
++    };
++
++    const collection = { name: 'Users API' };
++    const item = {
++      name: 'Delete User',
++      request: {
++        docs: 'Deletes a user by id.',
++        assertions: [
++          { name: 'status should be 204', operator: 'eq', value: '204', enabled: true }
++        ]
++      },
++      assertionResults: [
++        { status: 'fail', name: 'status should be 204', expected: '204', actual: '404' }
++      ]
++    };
++
++    const markdown = buildResponseDebugMarkdown({ selectedRequest, collection, item });
++
++    expect(markdown).toContain('# API Debug Context');
++    expect(markdown).toContain('# Request (cURL)');
++    expect(markdown).toContain('Collection: Users API');
++    expect(markdown).toContain('Request: Delete User');
++    expect(markdown).toContain('```bash');
++    expect(markdown).toContain('curl -X DELETE \'https://api.example.com/v1/users/42?hard=true&access_token=query-token\'');
++    expect(markdown).toContain('URL: https://api.example.com/v1/users/42?hard=true&access_token=query-token');
++    expect(markdown).not.toContain('/%7B%7BbaseUrl%7D%7D/api/v1/workspaces/:workspaceId');
++    expect(markdown).toContain('- Authorization: Bearer test-token');
++    expect(markdown).toContain('query-token');
++    expect(markdown).toContain('response-token');
++    expect(markdown).toContain('# Response');
++    expect(markdown).toContain('- Status: 404');
++    expect(markdown).toContain('- Duration: 187 ms');
++    expect(markdown).toContain('"USER_NOT_FOUND"');
++    expect(markdown).toContain('# Response Validation');
++    expect(markdown).toContain('Assertion mismatch: status should be 204');
++    expect(markdown).toContain('# Instructions');
++    expect(markdown).not.toContain('API 调试上下文');
++    expect(markdown).not.toContain('请求');
++    expect(markdown).not.toContain('响应');
++    expect(markdown).not.toContain('指令');
++  });
++
++  it('uses non-failure instructions for successful 2xx responses', () => {
++    const markdown = buildResponseDebugMarkdown({
++      selectedRequest: {
++        itemUid: 'req-2',
++        data: {
++          request: { method: 'GET', url: 'https://api.example.com/health' },
++          response: { statusCode: 200, statusText: 'OK', data: { ok: true } }
++        }
++      },
++      collection: { name: 'Users API' },
++      item: { name: 'Health check' }
++    });
++
++    expect(markdown).toContain('Review the API Debug Context and confirm the request target and response result.');
++    expect(markdown).toContain('Verify the response contract');
++    expect(markdown).not.toContain('failure');
++    expect(markdown).not.toContain('fix');
++  });
++
++  it('keeps problem-analysis instructions for 4xx and 5xx responses', () => {
++    for (const statusCode of [404, 500]) {
++      const markdown = buildResponseDebugMarkdown({
++        selectedRequest: {
++          itemUid: `req-${statusCode}`,
++          data: {
++            request: { method: 'GET', url: 'https://api.example.com/resource' },
++            response: { statusCode }
++          }
++        }
++      });
++
++      expect(markdown).toContain('failure symptoms');
++      expect(markdown).toContain('root cause');
++      expect(markdown).toContain('next validation action');
++    }
++  });
++
++  it('falls back to parsing pure-text timeline when structured request/response fields are missing', () => {
++    const { request, response, parsedTimeline } = __testUtils__.parseStructuredFallback({
++      request: {},
++      response: {
++        timeline: [
++          { type: 'request', message: 'DELETE https://api.example.com/v1/users/42?hard=true' },
++          { type: 'requestHeader', message: 'Accept: application/json' },
++          { type: 'response', message: 'HTTP/1.1 404 Not Found' },
++          { type: 'responseHeader', message: 'content-type: application/json; charset=utf-8' },
++          { type: 'error', message: '{\"error\":\"USER_NOT_FOUND\",\"message\":\"User 42 not found\"}' }
++        ]
++      },
++      timeline: [
++        { type: 'request', message: 'DELETE https://api.example.com/v1/users/42?hard=true' },
++        { type: 'requestHeader', message: 'Accept: application/json' },
++        { type: 'response', message: 'HTTP/1.1 404 Not Found' },
++        { type: 'responseHeader', message: 'content-type: application/json; charset=utf-8' },
++        { type: 'error', message: '{\"error\":\"USER_NOT_FOUND\",\"message\":\"User 42 not found\"}' }
++      ]
++    });
++
++    expect(request.method).toBe('DELETE');
++    expect(request.url).toBe('https://api.example.com/v1/users/42?hard=true');
++    expect(request.headers).toEqual({ Accept: 'application/json' });
++    expect(response.statusCode).toBe(404);
++    expect(response.headers).toEqual({ 'content-type': 'application/json; charset=utf-8' });
++    expect(response.data).toEqual({
++      error: 'USER_NOT_FOUND',
++      message: 'User 42 not found'
++    });
++    expect(parsedTimeline.errors).toContain('{\"error\":\"USER_NOT_FOUND\",\"message\":\"User 42 not found\"}');
++  });
++
++  it('preserves sensitive fields while truncating large bodies', () => {
++    const markdown = buildResponseDebugMarkdown({
++      maxBodyChars: 1000,
++      selectedRequest: {
++        itemUid: 'req-3',
++        data: {
++          request: {
++            method: 'POST',
++            url: 'https://api.example.com/login?password=query-secret',
++            data: {
++              username: 'mira',
++              password: 'body-secret',
++              nested: {
++                clientSecret: 'client-secret',
++                note: 'visible note'
++              }
++            }
++          },
++          response: {
++            statusCode: 200,
++            data: {
++              access_token: 'token-secret',
++              value: 'abcdefghijklmnopqrstuvwxyz'
++            }
++          }
++        }
++      }
++    });
++
++    expect(markdown).toContain('password=query-secret');
++    expect(markdown).toContain('body-secret');
++    expect(markdown).toContain('client-secret');
++    expect(markdown).toContain('token-secret');
++  });
++});
+diff --git a/packages/bruno-electron/src/app/collection-watcher.js b/packages/bruno-electron/src/app/collection-watcher.js
+index 35a68ac91..0033f08ae 100644
+--- a/packages/bruno-electron/src/app/collection-watcher.js
++++ b/packages/bruno-electron/src/app/collection-watcher.js
+@@ -818,6 +818,13 @@ class CollectionWatcher {
+ 
+     this.startCollectionDiscovery(win, collectionUid);
+ 
++    // Seed the store before the crawl starts: `ignored` is evaluated while chokidar is still
++    // walking the tree, and the config store is otherwise only written when the collection root's
++    // own add event is handled, which happens after every path has already been evaluated.
++    if (brunoConfig) {
++      setBrunoConfig(collectionUid, brunoConfig);
++    }
++
+     // Always ignore node_modules and .git, regardless of user config
+     // This prevents infinite loops with symlinked directories (e.g., npm workspaces)
+     const defaultIgnores = ['node_modules', '.git'];
+diff --git a/packages/bruno-electron/src/app/tests/collection-watcher.spec.js b/packages/bruno-electron/src/app/tests/collection-watcher.spec.js
+new file mode 100644
+index 000000000..781b07299
+--- /dev/null
++++ b/packages/bruno-electron/src/app/tests/collection-watcher.spec.js
+@@ -0,0 +1,82 @@
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++
++const collectionWatcher = require('../collection-watcher');
++const dotEnvWatcher = require('../dotenv-watcher');
++
++const requestYml = (name, seq) => `info:
++  name: ${name}
++  type: http
++  seq: ${seq}
++
++http:
++  method: GET
++  url: "{{baseUrl}}/ping"
++
++settings:
++  encodeUrl: true
++  timeout: 0
++  followRedirects: true
++  maxRedirects: 5
++  forwardAuthorizationHeader: false
++`;
++
++const collectionYml = (ignore = []) => {
++  const ignoreBlock = ignore.length ? `    ignore:\n${ignore.map((entry) => `      - ${entry}`).join('\n')}\n` : '';
++  return `opencollection: 1.0.0
++
++info:
++  name: ignore-regression
++  version: "1"
++extensions:
++  bruno:
++${ignoreBlock || '    {}\n'}`;
++};
++
++const createFakeWindow = () => {
++  const messages = [];
++  return {
++    messages,
++    webContents: {
++      send: (channel, ...args) => messages.push({ channel, args })
++    }
++  };
++};
++
++const addedRequestNames = (win) =>
++  win.messages
++    .filter(({ channel, args }) => channel === 'main:collection-tree-updated' && args[0] === 'addFile')
++    .map(({ args }) => path.basename(args[1].meta.pathname));
++
++const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
++
++describe('collection-watcher', () => {
++  let collectionPath;
++
++  beforeEach(() => {
++    collectionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'bruno-ignore-'));
++    fs.writeFileSync(path.join(collectionPath, 'Ignored Request.yml'), requestYml('Ignored Request', 1));
++    fs.writeFileSync(path.join(collectionPath, 'Kept Request.yml'), requestYml('Kept Request', 2));
++    fs.writeFileSync(path.join(collectionPath, 'opencollection.yml'), collectionYml(['Ignored Request.yml']));
++  });
++
++  afterEach(async () => {
++    await collectionWatcher.closeAllWatchers();
++    await dotEnvWatcher.closeAll();
++    fs.rmSync(collectionPath, { recursive: true, force: true });
++  });
++
++  it('applies the ignore list handed to addWatcher during the initial scan', async () => {
++    const win = createFakeWindow();
++    const brunoConfig = { ignore: ['Ignored Request.yml'] };
++
++    collectionWatcher.addWatcher(win, collectionPath, 'uid-ignore-regression', brunoConfig, false, false, {});
++
++    await wait(1500);
++
++    const names = addedRequestNames(win);
++    expect(names).toContain('Kept Request.yml');
++    expect(names).not.toContain('Ignored Request.yml');
++  });
++});
+diff --git a/packages/bruno-electron/src/ipc/openapi-sync.js b/packages/bruno-electron/src/ipc/openapi-sync.js
+index c41c56a35..5f0db5dc5 100644
+--- a/packages/bruno-electron/src/ipc/openapi-sync.js
++++ b/packages/bruno-electron/src/ipc/openapi-sync.js
+@@ -11,8 +11,12 @@ const {
+   stringifyCollection,
+   stringifyFolder
+ } = require('@usebruno/filestore');
+-const { openApiToBruno } = require('@usebruno/converters');
+ const { resolveEnvironmentInheritance } = require('@usebruno/common/utils');
++const {
++  convertApiSpecToBruno,
++  getUnsupportedApiSpecMessage,
++  isSupportedApiSpecForSync
++} = require('./openapi-sync/spec-support');
+ const { writeFile, sanitizeName, getCollectionFormat, posixifyPath } = require('../utils/filesystem');
+ 
+ const RESERVED_FOLDER_NAMES = ['node_modules', '.git', 'environments', 'mocks'];
+@@ -150,19 +154,6 @@ const parseSpec = (content) => {
+   }
+ };
+ 
+-/**
+- * Validate that a parsed spec object is a valid OpenAPI 3.x document.
+- * Swagger 2.0 is not supported — the converter only handles OpenAPI 3.x.
+- */
+-const isValidOpenApiSpec = (spec) => {
+-  if (!spec || typeof spec !== 'object') return false;
+-  if (spec.swagger) return false;
+-  if (spec.openapi && typeof spec.openapi === 'string' && spec.openapi.startsWith('3.')) {
+-    return spec.paths && typeof spec.paths === 'object';
+-  }
+-  return false;
+-};
+-
+ /**
+  * Fetch OpenAPI spec content from a remote URL or local file path.
+  * Handles proxy/cert resolution for remote URLs.
+@@ -874,7 +865,7 @@ const loadStoredSpecCollection = (collectionPath, brunoConfig) => {
+   const specRaw = fs.readFileSync(specPath, 'utf8');
+   const storedSpec = parseSpec(specRaw);
+   const groupBy = brunoConfig?.openapi?.[0]?.groupBy || 'tags';
+-  return openApiToBruno(storedSpec, { groupBy });
++  return convertApiSpecToBruno(storedSpec, { groupBy });
+ };
+ 
+ const registerOpenAPISyncIpc = (mainWindow) => {
+@@ -902,8 +893,8 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+       // This ensures specDrift uses the same comparison sensitivity as collectionDrift/remoteDrift.
+       const compareSpecs = (oldSpec, newSpec, groupBy) => {
+         // Convert both specs to Bruno collection format
+-        const oldBruno = oldSpec ? openApiToBruno(oldSpec, { groupBy }) : { items: [] };
+-        const newBruno = newSpec ? openApiToBruno(newSpec, { groupBy }) : { items: [] };
++        const oldBruno = oldSpec ? convertApiSpecToBruno(oldSpec, { groupBy }) : { items: [] };
++        const newBruno = newSpec ? convertApiSpecToBruno(newSpec, { groupBy }) : { items: [] };
+ 
+         // Build endpoint maps keyed by METHOD:normalizedPath
+         const oldItems = buildSpecItemsMap(oldBruno.items || []);
+@@ -1002,10 +993,8 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+       const newSpecContent = fetchResult.content;
+       const newSpec = fetchResult.spec;
+ 
+-      if (!isValidOpenApiSpec(newSpec)) {
+-        const error = newSpec?.swagger
+-          ? 'Swagger 2.0 is not supported. Please convert your spec to OpenAPI 3.x.'
+-          : 'The source does not contain a valid OpenAPI 3.x specification';
++      if (!isSupportedApiSpecForSync(newSpec)) {
++        const error = getUnsupportedApiSpecMessage(newSpec);
+         return {
+           isValid: false,
+           error,
+@@ -1120,7 +1109,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+       }
+ 
+       // Convert spec to Bruno collection format
+-      const specAsCollection = openApiToBruno(specToCompare, { groupBy });
++      const specAsCollection = convertApiSpecToBruno(specToCompare, { groupBy });
+ 
+       // Build map of expected items by endpoint ID (method:path)
+       const specItems = buildSpecItemsMap(specAsCollection.items || []);
+@@ -1282,7 +1271,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+ 
+       // Convert spec to Bruno collection format
+       const groupBy = brunoConfig?.openapi?.[0]?.groupBy || 'tags';
+-      const specAsCollection = openApiToBruno(specToUse, { groupBy });
++      const specAsCollection = convertApiSpecToBruno(specToUse, { groupBy });
+ 
+       // Find the spec item for this endpoint
+       const specItem = findItemInCollection(specAsCollection.items || [], method, endpointPath)?.item || null;
+@@ -1387,7 +1376,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+       // Mode: reset - Save spec and reset all endpoints to spec (preserve tests/scripts)
+       if (mode === 'reset' && diff.newSpec) {
+         const groupBy = brunoConfig?.openapi?.[0]?.groupBy || 'tags';
+-        const newCollection = openApiToBruno(diff.newSpec, { groupBy });
++        const newCollection = convertApiSpecToBruno(diff.newSpec, { groupBy });
+ 
+         // Build map of spec items by endpoint ID
+         const specItemsMap = buildSpecItemsMap(newCollection.items || []);
+@@ -1469,7 +1458,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+       let newCollection;
+       if (diff.newSpec) {
+         try {
+-          newCollection = openApiToBruno(diff.newSpec, { groupBy });
++          newCollection = convertApiSpecToBruno(diff.newSpec, { groupBy });
+         } catch (err) {
+           console.error('[OpenAPI Sync] Error converting spec:', err);
+         }
+@@ -1616,7 +1605,7 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+           const storedSpecPath = applySpecEntry ? path.join(getSpecsDir(), applySpecEntry.filename) : null;
+           if (storedSpecPath && fs.existsSync(storedSpecPath)) {
+             try {
+-              driftCollection = openApiToBruno(parseSpec(fs.readFileSync(storedSpecPath, 'utf8')), { groupBy });
++              driftCollection = convertApiSpecToBruno(parseSpec(fs.readFileSync(storedSpecPath, 'utf8')), { groupBy });
+             } catch (err) {
+               console.error('[OpenAPI Sync] Error converting stored spec for drift reset:', err);
+             }
+@@ -1747,10 +1736,8 @@ const registerOpenAPISyncIpc = (mainWindow) => {
+     try {
+       const result = await fetchSpecFromSource({ collectionUid, collectionPath, sourceUrl, environmentContext });
+       if (result.error) return { error: result.error, errorCode: result.errorCode };
+-      if (!isValidOpenApiSpec(result.spec)) {
+-        const error = result.spec?.swagger
+-          ? 'Swagger 2.0 is not supported. Please convert your spec to OpenAPI 3.x.'
+-          : 'The source does not contain a valid OpenAPI 3.x specification';
++      if (!isSupportedApiSpecForSync(result.spec)) {
++        const error = getUnsupportedApiSpecMessage(result.spec);
+         return { error };
+       }
+       return { content: result.content };
+diff --git a/packages/bruno-electron/src/ipc/openapi-sync/spec-support.js b/packages/bruno-electron/src/ipc/openapi-sync/spec-support.js
+new file mode 100644
+index 000000000..1d9a06894
+--- /dev/null
++++ b/packages/bruno-electron/src/ipc/openapi-sync/spec-support.js
+@@ -0,0 +1,39 @@
++const { openApiToBruno } = require('@usebruno/converters');
++
++const hasPaths = (spec) => (
++  spec
++  && typeof spec === 'object'
++  && spec.paths
++  && typeof spec.paths === 'object'
++);
++
++const getApiSpecKind = (spec) => {
++  if (!hasPaths(spec)) {
++    return null;
++  }
++
++  if (typeof spec.openapi === 'string' && spec.openapi.startsWith('3.')) {
++    return 'openapi3';
++  }
++
++  if (typeof spec.swagger === 'string' && spec.swagger.startsWith('2')) {
++    return 'swagger2';
++  }
++
++  return null;
++};
++
++const isSupportedApiSpecForSync = (spec) => Boolean(getApiSpecKind(spec));
++
++const getUnsupportedApiSpecMessage = () => (
++  'The source does not contain a valid OpenAPI 3.x or Swagger 2.0 specification'
++);
++
++const convertApiSpecToBruno = (spec, options = {}) => openApiToBruno(spec, options);
++
++module.exports = {
++  getApiSpecKind,
++  isSupportedApiSpecForSync,
++  getUnsupportedApiSpecMessage,
++  convertApiSpecToBruno
++};
+diff --git a/packages/bruno-electron/tests/ipc/openapi-sync-spec-support.spec.js b/packages/bruno-electron/tests/ipc/openapi-sync-spec-support.spec.js
+new file mode 100644
+index 000000000..0500fd576
+--- /dev/null
++++ b/packages/bruno-electron/tests/ipc/openapi-sync-spec-support.spec.js
+@@ -0,0 +1,60 @@
++const { describe, it, expect } = require('@jest/globals');
++
++const {
++  convertApiSpecToBruno,
++  getApiSpecKind,
++  getUnsupportedApiSpecMessage,
++  isSupportedApiSpecForSync
++} = require('../../src/ipc/openapi-sync/spec-support');
++
++describe('OpenAPI sync spec support', () => {
++  it('accepts Swagger 2.0 specs for sync', () => {
++    const spec = {
++      swagger: '2.0',
++      info: { title: 'Petstore', version: '1.0.0' },
++      host: 'api.example.com',
++      basePath: '/v1',
++      schemes: ['https'],
++      paths: {
++        '/pets': {
++          get: {
++            tags: ['pets'],
++            summary: 'List pets',
++            responses: { 200: { description: 'OK' } }
++          }
++        }
++      }
++    };
++
++    expect(getApiSpecKind(spec)).toBe('swagger2');
++    expect(isSupportedApiSpecForSync(spec)).toBe(true);
++
++    const collection = convertApiSpecToBruno(spec, { groupBy: 'tags' });
++    expect(collection.name).toBe('Petstore');
++    expect(JSON.stringify(collection.items)).toContain('{{baseUrl}}/pets');
++    expect(JSON.stringify(collection.environments)).toContain('https://api.example.com/v1');
++  });
++
++  it('accepts OpenAPI 3.x specs for sync', () => {
++    const spec = {
++      openapi: '3.0.0',
++      paths: {
++        '/users': {
++          get: {
++            responses: { 200: { description: 'OK' } }
++          }
++        }
++      }
++    };
++
++    expect(getApiSpecKind(spec)).toBe('openapi3');
++    expect(isSupportedApiSpecForSync(spec)).toBe(true);
++  });
++
++  it('rejects specs outside the sync support boundary', () => {
++    expect(isSupportedApiSpecForSync({ swagger: '1.2', info: {}, paths: {} })).toBe(false);
++    expect(isSupportedApiSpecForSync({ openapi: '2.0.0', info: {}, paths: {} })).toBe(false);
++    expect(isSupportedApiSpecForSync({ openapi: '3.0.0' })).toBe(false);
++    expect(getUnsupportedApiSpecMessage()).toContain('OpenAPI 3.x or Swagger 2.0');
++  });
++});
