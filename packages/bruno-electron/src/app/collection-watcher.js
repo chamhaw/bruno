@@ -818,6 +818,13 @@ class CollectionWatcher {
 
     this.startCollectionDiscovery(win, collectionUid);
 
+    // Seed the store before the crawl starts: `ignored` is evaluated while chokidar is still
+    // walking the tree, and the config store is otherwise only written when the collection root's
+    // own add event is handled, which happens after every path has already been evaluated.
+    if (brunoConfig) {
+      setBrunoConfig(collectionUid, brunoConfig);
+    }
+
     // Always ignore node_modules and .git, regardless of user config
     // This prevents infinite loops with symlinked directories (e.g., npm workspaces)
     const defaultIgnores = ['node_modules', '.git'];
