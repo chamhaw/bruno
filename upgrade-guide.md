@@ -53,11 +53,11 @@ baseline/v4.2.0  =  upstream/release/v4.2.0 的 b84eca260  (2026-09-10)
 | 在请求中运行示例 | `feat: run request examples`<br>`refactor: make example try action side-effect free` |
 | watcher 忽略列表种子 | `fix(watcher): seed the bruno config store before the initial crawl` |
 
-随时可以用这条命令核对 fork delta 的规模，它不应包含 `package-lock.json` 或任何构建产物：
+随时可以用这条命令核对 fork 定制的规模。口径限定在 `packages/` 下，这样本指南、`upgrades/` 存档这类文档增删不会干扰数字：
 
 ```bash
-git diff --name-only baseline/v4.2.0..master | wc -l    # 期望 38
-git diff --name-only baseline/v4.2.0..master | grep -i lock   # 期望无输出
+git diff --name-only baseline/v4.2.0..master -- packages/ | wc -l          # 期望 38
+git diff --name-only baseline/v4.2.0..master -- packages/ | grep -i lock   # 期望无输出
 ```
 
 ## 升级流程
@@ -80,7 +80,7 @@ npm i --legacy-peer-deps        # 升级前先同步依赖，避免 hook 失败
 git fetch upstream --tags --prune
 git checkout master
 mkdir -p upgrades
-git diff baseline/${OLD_ANCHOR}..master > upgrades/${OLD_ANCHOR}..master.patch
+git diff baseline/${OLD_ANCHOR}..master -- . ':(exclude)upgrades' > upgrades/${OLD_ANCHOR}..master.patch
 ```
 
 ### 2. 建升级分支，工作树换成新上游树
@@ -188,7 +188,7 @@ git branch -D baseline/${OLD_ANCHOR}
 git branch -D upgrade/from_${OLD_ANCHOR}-to-${NEW_ANCHOR}
 
 # 存档本次升级后的 fork delta，供下次升级对照
-git diff baseline/${NEW_ANCHOR}..master > upgrades/${NEW_ANCHOR}..master.patch
+git diff baseline/${NEW_ANCHOR}..master -- . ':(exclude)upgrades' > upgrades/${NEW_ANCHOR}..master.patch
 
 git push origin master
 git push origin baseline/${NEW_ANCHOR}
