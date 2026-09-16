@@ -1,6 +1,8 @@
 # Fork 升级指南
 
-本 repo 是 [usebruno/bruno](https://github.com/usebruno/bruno) 的 fork。`master` 是唯一的长期 fork 主干，它永远等于「某个上游版本锚点的完整源码树」叠加「本 fork 的定制提交」。上游发新版本后按本指南升级，升级过程中 fork 定制会完整保留。
+本 repo 是 [usebruno/bruno](https://github.com/usebruno/bruno) 的 fork。`main` 是唯一的长期 fork 主干，它永远等于「某个上游版本锚点的完整源码树」叠加「本 fork 的定制提交」。上游发新版本后按本指南升级，升级过程中 fork 定制会完整保留。
+
+fork 主干与上游主线同名，都是 `main`。本指南约定：不带 remote 前缀的 `main` 一律指 fork 自己的主干，指上游时写 `upstream/main`。
 
 同一套流程来自 litellm fork 的长期实践。核心是 tag 到 tag 的**三方合并**，base 取上一次的锚点树。
 
@@ -13,20 +15,20 @@
 
 | 分支 | 含义 |
 | --- | --- |
-| `master` | 唯一长期主干，= 上游锚点树 + fork 定制 |
+| `main` | fork 的唯一长期主干，= 上游锚点树 + fork 定制 |
 | `baseline/<锚点>` | 纯净的上游锚点树，不含任何 fork 改动，升级时作为三方合并的 base |
-| `upgrade/from_<旧锚点>-to_<新锚点>` | 升级期间的临时分支，完成验证后并入 `master` 并删除 |
+| `upgrade/from_<旧锚点>-to_<新锚点>` | 升级期间的临时分支，完成验证后并入 `main` 并删除 |
 
 `origin` 与 `upstream` 的方向不能反。litellm、skill、脚本里的所有 SOP 都假定 `origin` 是自己的 fork。
 
 ## bruno 的上游发布方式（与 litellm 不同，务必先读）
 
-litellm 的 release tag 打在 `main` 上，可以直接按 tag 锚定。**bruno 不是这样**：release tag 打在 `release/vX.Y.Z` 分支上，`main` 是开发主线，二者会分叉。
+litellm 的 release tag 打在上游 `main` 上，可以直接按 tag 锚定。**bruno 不是这样**：release tag 打在 `release/vX.Y.Z` 分支上，`upstream/main` 是开发主线，二者会分叉。
 
 实测结论：
 
-- `git describe --tags --abbrev=0 upstream/main` 得到 `v3.0.0`，而 `v4.0.0`、`v4.1.0` 都不在 `main` 的祖先链上
-- 只有 `v0.x` 到 `v3.0.1` 的 tag 是 `main` 的祖先
+- `git describe --tags --abbrev=0 upstream/main` 得到 `v3.0.0`，而 `v4.0.0`、`v4.1.0` 都不在 `upstream/main` 的祖先链上
+- 只有 `v0.x` 到 `v3.0.1` 的 tag 是 `upstream/main` 的祖先
 - `upstream/release/v4.2.0` 是当前最新 release 分支，它包含 fork 依赖的上游文件 `packages/bruno-app/src/utils/timeline/index.js`，而 `v4.0.0`、`v4.1.0` 都不包含
 
 因此**升级锚点取「上游最新 release 分支的头提交」**，等该版本正式打 tag 后再前移锚点到 tag 本身（见「重新锚定」）。
@@ -41,7 +43,7 @@ baseline/v4.2.0  =  upstream/release/v4.2.0 的 b84eca260  (2026-09-10)
 
 ## 本 fork 的定制清单
 
-`master` 相对锚点的 delta 是 38 个文件、约 +2417/-135 行，落在 6 个特性上：
+`main` 相对锚点的 delta 是 38 个文件、约 +2417/-135 行，落在 6 个特性上：
 
 | 特性 | 承接的提交 |
 | --- | --- |
@@ -56,8 +58,8 @@ baseline/v4.2.0  =  upstream/release/v4.2.0 的 b84eca260  (2026-09-10)
 随时可以用这条命令核对 fork 定制的规模。口径限定在 `packages/` 下，这样本指南、`upgrades/` 存档这类文档增删不会干扰数字：
 
 ```bash
-git diff --name-only baseline/v4.2.0..master -- packages/ | wc -l          # 期望 38
-git diff --name-only baseline/v4.2.0..master -- packages/ | grep -i lock   # 期望无输出
+git diff --name-only baseline/v4.2.0..main -- packages/ | wc -l          # 期望 38
+git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期望无输出
 ```
 
 ## 升级流程
@@ -74,28 +76,28 @@ nvm use                         # .nvmrc 钉的是 Node v22.12.0
 npm i --legacy-peer-deps        # 升级前先同步依赖，避免 hook 失败
 ```
 
-**分支基点判定**：第 2 步从 `master` 拉升级分支，前提是 `master` 已经是上一次升级的落点。若上一次的 `upgrade/from_*` 尚未并入 `master` 就开始下一次升级，第 1 步的 `git diff baseline/${OLD_ANCHOR}..master` 会把上次升级的全部改动一并算进本次 fork delta，patch 既无法归因也无法回放。
+**分支基点判定**：第 2 步从 `main` 拉升级分支，前提是 `main` 已经是上一次升级的落点。若上一次的 `upgrade/from_*` 尚未并入 `main` 就开始下一次升级，第 1 步的 `git diff baseline/${OLD_ANCHOR}..main` 会把上次升级的全部改动一并算进本次 fork delta，patch 既无法归因也无法回放。
 
 ```bash
 git branch --list 'upgrade/from_*'                     # 有残留 = 上次升级未收尾
-git log --oneline master..upgrade/from_<上次锚点对>    # 非空 = 确认未并入
+git log --oneline main..upgrade/from_<上次锚点对>    # 非空 = 确认未并入
 ```
 
-未并入时走**叠加升级**：后续各步把 `master` 换成上一升级分支的头，`OLD_ANCHOR` 换成上一目标锚点，第 6 步的 ff-merge 目标也相应前移。收尾仍应先把上一次升级并入 `master` 再开下一次，否则叠加层数会逐次累积。
+未并入时走**叠加升级**：后续各步把 `main` 换成上一升级分支的头，`OLD_ANCHOR` 换成上一目标锚点，第 6 步的 ff-merge 目标也相应前移。收尾仍应先把上一次升级并入 `main` 再开下一次，否则叠加层数会逐次累积。
 
 ### 1. 抓取上游并留档 fork delta
 
 ```bash
 git fetch upstream --tags --prune
-git checkout master
+git checkout main
 mkdir -p upgrades
-git diff baseline/${OLD_ANCHOR}..master -- . ':(exclude)upgrades' > upgrades/${OLD_ANCHOR}..master.patch
+git diff baseline/${OLD_ANCHOR}..main -- . ':(exclude)upgrades' > upgrades/${OLD_ANCHOR}..main.patch
 ```
 
 ### 2. 建升级分支，工作树换成新上游树
 
 ```bash
-git checkout -b upgrade/from_${OLD_ANCHOR}-to-${NEW_ANCHOR} master
+git checkout -b upgrade/from_${OLD_ANCHOR}-to-${NEW_ANCHOR} main
 git read-tree -u --reset ${NEW_REF}
 ```
 
@@ -109,17 +111,17 @@ git read-tree -u --reset ${NEW_REF}
 OLD_ANCHOR=baseline/v4.2.0
 NEW_REF=upstream/release/v4.3.0
 
-git diff --no-renames --name-status "$OLD_ANCHOR" master | while IFS=$'\t' read -r st path; do
+git diff --no-renames --name-status "$OLD_ANCHOR" main | while IFS=$'\t' read -r st path; do
   case "$st" in
     A|M)
       if ! git cat-file -e "$OLD_ANCHOR:$path" 2>/dev/null; then
-        git checkout master -- "$path"                      # fork 新增的文件，直接取 fork 版本
+        git checkout main -- "$path"                      # fork 新增的文件，直接取 fork 版本
       elif ! git cat-file -e "$NEW_REF:$path" 2>/dev/null; then
         echo "REVIEW $path: 上游已删除但 fork 改过，需人工决定"
       else
         git show "$NEW_REF:$path"    > /tmp/up-ours
         git show "$OLD_ANCHOR:$path" > /tmp/up-base
-        git show "master:$path"      > /tmp/up-theirs
+        git show "main:$path"      > /tmp/up-theirs
         if git merge-file -p /tmp/up-ours /tmp/up-base /tmp/up-theirs > "$path"; then
           echo "merged  $path"
         else
@@ -147,7 +149,7 @@ done
 
 - `packages/bruno-electron/src/ipc/openapi-sync.js`。fork 把 `openApiToBruno` 换成了 `./openapi-sync/spec-support` 的 `convertApiSpecToBruno`（9 个调用点）；上游会继续在此文件加东西（例如 v4.2.0 加了 `resolveEnvironmentInheritance`）。两侧都要留，不能整块取一侧。
 - `packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/index.js`。fork 引入了 `utils/collections` 的 `sortExamplesForSidebar`；上游同文件里有 `const collectionSortOrder = useSelector(...)`。fork 早期版本在文件顶部重复声明过同名变量，若再冲突要保留上游那处声明，重复声明在 ES module 里是 SyntaxError。
-- `packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.js`。fork 在这里加过又撤过若干辅助机制（`copyDisplayName`、`generateUniqueName`、`responseExampleSendsInFlight`）。以「master 当前状态」为准，别把已撤销的机制重新捡回来。
+- `packages/bruno-app/src/providers/ReduxStore/slices/collections/actions.js`。fork 在这里加过又撤过若干辅助机制（`copyDisplayName`、`generateUniqueName`、`responseExampleSendsInFlight`）。以「main 当前状态」为准，别把已撤销的机制重新捡回来。
 - `packages/bruno-electron/src/app/collection-watcher.js`。fork 的修复是在初始扫描前用 `setBrunoConfig(collectionUid, brunoConfig)` 给配置存储播种；上游重构 watcher 时会动到同一段初始化路径。
 - `packages/bruno-app/src/utils/collections/index.js`。fork 在此导出 `sortExamplesForSidebar`，上游也在持续改这个文件。
 - `packages/bruno-app/src/components/Sidebar/Collections/Collection/CollectionItem/ExampleItem/index.js`。最常见的冲突形态：两侧都在文件顶部同一位置添加了 import。解法是两边都保留，不是取一侧。实测这条路径在锚点前进 12 个上游提交后必冲突。
@@ -155,8 +157,8 @@ done
 ### 5. 验证
 
 ```bash
-# 1) 拓扑自检：master 的 delta 只应有 fork 特性文件，无上游漂移噪声
-git diff --name-only baseline/${OLD_ANCHOR}..master | wc -l
+# 1) 拓扑自检：main 的 delta 只应有 fork 特性文件，无上游漂移噪声
+git diff --name-only baseline/${OLD_ANCHOR}..main | wc -l
 
 # 2) fork 特性回归测试
 cd packages/bruno-electron && npx jest src/app/tests/collection-watcher.spec.js     # 1 passed
@@ -196,7 +198,7 @@ npm i --legacy-peer-deps && npm run setup
 git add -A
 git commit -m "upgrade: merge upstream <新版本> into the fork tree"
 
-git checkout master
+git checkout main
 git merge --ff-only upgrade/from_${OLD_ANCHOR}-to-${NEW_ANCHOR}
 
 # 轮转基准点：新锚点接棒，旧的 baseline 分支删除
@@ -205,9 +207,9 @@ git branch -D baseline/${OLD_ANCHOR}
 git branch -D upgrade/from_${OLD_ANCHOR}-to-${NEW_ANCHOR}
 
 # 存档本次升级后的 fork delta，供下次升级对照
-git diff baseline/${NEW_ANCHOR}..master -- . ':(exclude)upgrades' > upgrades/${NEW_ANCHOR}..master.patch
+git diff baseline/${NEW_ANCHOR}..main -- . ':(exclude)upgrades' > upgrades/${NEW_ANCHOR}..main.patch
 
-git push origin master
+git push origin main
 git push origin baseline/${NEW_ANCHOR}
 ```
 
@@ -226,18 +228,18 @@ git push origin baseline/v4.2.0
 
 ## 回滚方案
 
-`master` 在 ff-merge 之前不被触碰，所以回滚成本按阶段递增：
+`main` 在 ff-merge 之前不被触碰，所以回滚成本按阶段递增：
 
 | 阶段 | 回滚动作 |
 | --- | --- |
-| 第 2 步之后 | `git checkout master` 后 `git branch -D upgrade/from_<锚点对>`，换过树的工作树直接丢弃 |
-| 第 3–5 步 | 同上。`upgrade/` 分支未并入 `master`，不留污染 |
-| 第 6 步 ff-merge 之后 | `master` 回退到升级前的提交：`git reset --hard <升级前 master>`；若已 push，再 `git push --force-with-lease origin master` |
+| 第 2 步之后 | `git checkout main` 后 `git branch -D upgrade/from_<锚点对>`，换过树的工作树直接丢弃 |
+| 第 3–5 步 | 同上。`upgrade/` 分支未并入 `main`，不留污染 |
+| 第 6 步 ff-merge 之后 | `main` 回退到升级前的提交：`git reset --hard <升级前 main>`；若已 push，再 `git push --force-with-lease origin main` |
 
-第 2 步换树会就地改动工作树，动手前先记下回滚锚点，否则 ff-merge 之后无法定位升级前的 `master`：
+第 2 步换树会就地改动工作树，动手前先记下回滚锚点，否则 ff-merge 之后无法定位升级前的 `main`：
 
 ```bash
-git rev-parse master    # 记下输出，作为本次升级的回滚锚点
+git rev-parse main    # 记下输出，作为本次升级的回滚锚点
 ```
 
 强推属外向不可逆操作，执行前必须确认。`upgrades/` 下的历史 patch 与 `baseline/*` 分支是升级过程的存档，回滚时不需要改动它们。
@@ -251,7 +253,7 @@ git rev-parse master    # 记下输出，作为本次升级的回滚锚点
 - 干跑产物上跑 fork 特性测试：electron 2 suites / 4 tests、bruno-app 6 suites / 112 tests，全绿
 - 关键符号两全：fork 的 `convertApiSpecToBruno`（9 处）、`sortExamplesForSidebar`、`setBrunoConfig`，与上游 v4.2.0 新增的 `resolveEnvironmentInheritance`（2 处）同时存在
 
-2026-09-16 复核：以同一 `upstream/main` 干跑第 3 步脚本（merge-file 输出写临时目录，不落工作树），复现 22 个 merged、15 个 fork-new、1 个 CONFLICT，合计 38；上游 `main` 相对锚点确为 12 个提交；唯一冲突仍是 `ExampleItem/index.js`；干跑结束后 `git status --porcelain` 为空。`master` 上按第 5 步跑 6 个 spec 为 6 suites / 98 tests 全绿。
+2026-09-16 复核：以同一 `upstream/main` 干跑第 3 步脚本（merge-file 输出写临时目录，不落工作树），复现 22 个 merged、15 个 fork-new、1 个 CONFLICT，合计 38；上游 `main` 相对锚点确为 12 个提交；唯一冲突仍是 `ExampleItem/index.js`；干跑结束后 `git status --porcelain` 为空。`main` 上按第 5 步跑 6 个 spec 为 6 suites / 98 tests 全绿。
 
 配方本身是可执行的，不是纸面流程。
 
@@ -267,6 +269,6 @@ git rev-parse master    # 记下输出，作为本次升级的回滚锚点
 
 ## 排除可能性后仍失败时的排查顺序
 
-1. `git diff --name-only baseline/<锚点>..master | grep -i lock` 有输出 → 升级过程卷入了 lock，回退重做
+1. `git diff --name-only baseline/<锚点>..main | grep -i lock` 有输出 → 升级过程卷入了 lock，回退重做
 2. 构建报找不到某个 `@usebruno/*` 导出 → 内部包 `dist` 陈旧，重跑 `npm run setup`
 3. 测试失败但 `git diff` 显示该文件只是上游正规改动 → 说明锚点选错，检查是否误用了 `v4.0.0` / `v4.1.0` 这类不含依赖的旧锚点
