@@ -13,12 +13,14 @@ import { addTab } from 'providers/ReduxStore/slices/tabs';
 import HttpMethodSelector from 'components/RequestPane/QueryUrl/HttpMethodSelector';
 import { getDefaultRequestPaneTab } from 'utils/collections';
 import { getRequestFromCurlCommand } from 'utils/curl';
+import { getMcpRequest, isValidToolArguments, MCP_METHODS } from 'utils/mcp';
 import { IconArrowBackUp, IconCaretDown, IconEdit } from '@tabler/icons';
 import { sanitizeName, validateName, validateNameError } from 'utils/common/regex';
 import Dropdown from 'components/Dropdown';
 import PathDisplay from 'components/PathDisplay';
 import Portal from 'components/Portal';
 import Help from 'components/Help';
+import McpRequestFields from './McpRequestFields';
 import StyledWrapper from './StyledWrapper';
 import SingleLineEditor from 'components/SingleLineEditor/index';
 import { useTheme } from 'styled-components';
@@ -104,6 +106,9 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
     return 'http-request';
   };
 
+  const isMcpToolCall = (requestType, mcpMethod) =>
+    requestType === 'mcp' && mcpMethod === MCP_METHODS.TOOLS_CALL;
+
   const formik = useFormik({
     enableReinitialize: true,
     initialValues: {
@@ -112,7 +117,10 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
       requestType: getRequestType(collectionPresets),
       requestUrl: collectionPresets.requestUrl || '',
       requestMethod: 'GET',
-      curlCommand: ''
+      curlCommand: '',
+      mcpMethod: MCP_METHODS.TOOLS_CALL,
+      toolName: '',
+      toolArguments: ''
     },
     validationSchema: Yup.object({
       requestName: Yup.string()
@@ -144,7 +152,19 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
             message: `Invalid cURL Command`,
             test: (value) => getRequestFromCurlCommand(value) !== null
           })
-      })
+      }),
+      requestUrl: Yup.string().when('requestType', {
+        is: (requestType) => requestType === 'mcp',
+        then: Yup.string().trim().required('url is required')
+      }),
+      toolName: Yup.string().when(['requestType', 'mcpMethod'], (requestType, mcpMethod, schema) =>
+        isMcpToolCall(requestType, mcpMethod) ? schema.trim().required('tool name is required') : schema
+      ),
+      toolArguments: Yup.string().when(['requestType', 'mcpMethod'], (requestType, mcpMethod, schema) =>
+        isMcpToolCall(requestType, mcpMethod)
+          ? schema.test('is-json-object', 'must be a JSON object', (value) => !value || isValidToolArguments(value))
+          : schema
+      )
     }),
     onSubmit: (values) => {
       const isGrpcRequest = values.requestType === 'grpc-request';
@@ -225,6 +245,38 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
             body: request.body,
             auth: request.auth,
             settings: settings
+          })
+        )
+          .then(() => {
+            toast.success('New request created!');
+            onClose();
+          })
+          .catch((err) => toast.error(err ? err.message : 'An error occurred while adding the request'));
+      } else if (values.requestType === 'mcp') {
+        const request = getMcpRequest({
+          url: values.requestUrl,
+          mcpMethod: values.mcpMethod,
+          toolName: values.toolName,
+          toolArguments: values.toolArguments
+        });
+
+        if (!request) {
+          toast.error('Unable to build the MCP request');
+          return;
+        }
+
+        dispatch(
+          newHttpRequest({
+            requestName: values.requestName,
+            filename: filename,
+            // An MCP exchange is a plain HTTP POST, so it is stored as an HTTP request.
+            requestType: 'http-request',
+            requestUrl: request.url,
+            requestMethod: request.method,
+            collectionUid: collectionUid,
+            itemUid: item ? item.uid : null,
+            headers: request.headers,
+            body: request.body
           })
         )
           .then(() => {
@@ -401,6 +453,21 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
                       From cURL
                     </label>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      id="mcp"
+                      name="requestType"
+                      value="mcp"
+                      checked={formik.values.requestType === 'mcp'}
+                      onChange={formik.handleChange}
+                      data-testid="mcp"
+                    />
+                    <label htmlFor="mcp" className="ml-1 cursor-pointer select-none">
+                      MCP
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -497,7 +564,7 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
                     URL
                   </label>
                   <div className="flex items-center mt-2 ">
-                    {!['grpc-request', 'ws-request'].includes(formik.values.requestType) ? (
+                    {!['grpc-request', 'ws-request', 'mcp'].includes(formik.values.requestType) ? (
                       <div className="flex items-center h-full method-selector-container">
                         <HttpMethodSelector
                           method={formik.values.requestMethod}
@@ -534,6 +601,7 @@ const NewRequest = ({ collectionUid, item, isEphemeral, onClose }) => {
                     <div className="text-red-500">{formik.errors.requestUrl}</div>
                   ) : null}
                 </div>
+                {formik.values.requestType === 'mcp' ? <McpRequestFields formik={formik} /> : null}
               </>
             ) : (
               <div className="mt-4">

@@ -33,7 +33,8 @@ const StyledWrapper = styled.div`
     height: 2.1rem;
   }
 
-  textarea.curl-command {
+  textarea.curl-command,
+  textarea.mcp-arguments {
     min-height: 150px;
   }
   .dropdown {
