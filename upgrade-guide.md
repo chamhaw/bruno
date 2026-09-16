@@ -62,6 +62,15 @@ git diff --name-only baseline/v4.2.0..main -- packages/ | wc -l          # 期�
 git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期望无输出
 ```
 
+### 已清理的分支与有意放弃的实现
+
+fork 的全部历史分支已于 2026-09-16 清理，`main` 是 fork 定制的唯一载体。清理前逐个分支核对过定制内容是否已在 `main` 中，只有 `dev` 上有两项未进入 `main`，均已确认放弃：
+
+- **Copy-for-AI 的凭据脱敏**。`dev` 曾实现 `REDACTED_VALUE`、`SENSITIVE_KEY_PATTERN` 与 `redactUrl` / `redactHeaderValue` / `redactText` / `redactStructuredValue`，对 curl 命令与 URL 行做掩码。`main` 保持明文，且 `packages/bruno-app/src/utils/response/debugContextMarkdown.spec.js` 显式断言 `- Authorization: Bearer test-token` 与 `password=query-secret` 原样出现在生成结果里。这是最终意图，不是缺陷。
+- **Devtools 时间线的非数组兜底**。`Devtools/Console/RequestDetailsPanel` 按数组处理 `response.timeline`，不为非数组输入构造兜底项。
+
+升级时三方合并落到这两个文件，以 `main` 当前行为为准，不要把上述机制重新捡回来。
+
 ## 升级流程
 
 下文设 `OLD_ANCHOR=v4.2.0`（对应分支 `baseline/${OLD_ANCHOR}`），`NEW_REF=upstream/release/v4.3.0`，`NEW_ANCHOR=v4.3.0`。实际升级时把这三个值换成当时的上游版本。
