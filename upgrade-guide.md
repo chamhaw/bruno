@@ -74,6 +74,15 @@ nvm use                         # .nvmrc 钉的是 Node v22.12.0
 npm i --legacy-peer-deps        # 升级前先同步依赖，避免 hook 失败
 ```
 
+**分支基点判定**：第 2 步从 `master` 拉升级分支，前提是 `master` 已经是上一次升级的落点。若上一次的 `upgrade/from_*` 尚未并入 `master` 就开始下一次升级，第 1 步的 `git diff baseline/${OLD_ANCHOR}..master` 会把上次升级的全部改动一并算进本次 fork delta，patch 既无法归因也无法回放。
+
+```bash
+git branch --list 'upgrade/from_*'                     # 有残留 = 上次升级未收尾
+git log --oneline master..upgrade/from_<上次锚点对>    # 非空 = 确认未并入
+```
+
+未并入时走**叠加升级**：后续各步把 `master` 换成上一升级分支的头，`OLD_ANCHOR` 换成上一目标锚点，第 6 步的 ff-merge 目标也相应前移。收尾仍应先把上一次升级并入 `master` 再开下一次，否则叠加层数会逐次累积。
+
 ### 1. 抓取上游并留档 fork delta
 
 ```bash
@@ -163,7 +172,15 @@ cd packages/bruno-app && npx jest \
 # 3) 构建
 npm run build:web               # bruno-app 打包
 npm run build:bruno-filestore   # 受 schema 漂移影响最敏感的包
+
+# 4) e2e：fork 改写过上游有 e2e 覆盖的组件，这一层只有 e2e 能兜
+npx playwright test tests/response/timeline-headers/ --project=default
+npx playwright test tests/response/response-actions.spec.ts --project=default
+npx playwright test tests/response-examples/ --project=default
+npx playwright test tests/collection/ tests/sidebar/ --project=default
 ```
+
+第 4 项不可省。fork 的 `feat(timeline): add headers view toggle` 把 `Timeline/TimelineItem/Common/Headers/index.js` 改了 +123/-38，而该组件正是上游 `#8857` 引入、并附带 e2e `tests/response/timeline-headers/` 的。fork 的单测（`Headers/index.spec.js`）只断言 fork 自己加的逻辑，对上游行为的回归完全无感；`npm run build:web` 也只在语法层面兜底。上游与 fork 在同一组件上继续分头改动时，三方合并的结果只有 e2e 能判。上面四条对应 fork 改写过的四个组件族。`OpenAPISyncTab/` 的 UI 层没有 e2e 覆盖，那里只有单测 `openapi-sync-spec-support.spec.js`（3 tests）兜底，升级后需要人工过一遍同步流程。全量 `npx playwright test --project=default` 是更彻底的选项，代价是耗时。
 
 若构建报 `export 'xxx' was not found in '@usebruno/common/utils'` 一类错误，先怀疑内部包的 `dist` 陈旧，重跑
 
@@ -207,14 +224,34 @@ git push origin baseline/v4.2.0
 
 记进本文件的「当前锚点」一节的 SHA 也要同步更新。
 
+## 回滚方案
+
+`master` 在 ff-merge 之前不被触碰，所以回滚成本按阶段递增：
+
+| 阶段 | 回滚动作 |
+| --- | --- |
+| 第 2 步之后 | `git checkout master` 后 `git branch -D upgrade/from_<锚点对>`，换过树的工作树直接丢弃 |
+| 第 3–5 步 | 同上。`upgrade/` 分支未并入 `master`，不留污染 |
+| 第 6 步 ff-merge 之后 | `master` 回退到升级前的提交：`git reset --hard <升级前 master>`；若已 push，再 `git push --force-with-lease origin master` |
+
+第 2 步换树会就地改动工作树，动手前先记下回滚锚点，否则 ff-merge 之后无法定位升级前的 `master`：
+
+```bash
+git rev-parse master    # 记下输出，作为本次升级的回滚锚点
+```
+
+强推属外向不可逆操作，执行前必须确认。`upgrades/` 下的历史 patch 与 `baseline/*` 分支是升级过程的存档，回滚时不需要改动它们。
+
 ## 本配方的验证记录
 
 2026-09-15 用 `upstream/main`（比锚点新 12 个上游提交，比真实升级更激进）对第 3 步的脚本做过一次受控干跑：
 
-- 38 个 fork delta 文件全部有归宿：28 个 merged、9 个 fork-new、1 个 CONFLICT
+- 38 个 fork delta 文件全部有归宿：22 个 merged、15 个 fork-new、1 个 CONFLICT
 - 唯一冲突是 `ExampleItem/index.js` 的 import 块，两侧保留后 `node --check` 通过
 - 干跑产物上跑 fork 特性测试：electron 2 suites / 4 tests、bruno-app 6 suites / 112 tests，全绿
 - 关键符号两全：fork 的 `convertApiSpecToBruno`（9 处）、`sortExamplesForSidebar`、`setBrunoConfig`，与上游 v4.2.0 新增的 `resolveEnvironmentInheritance`（2 处）同时存在
+
+2026-09-16 复核：以同一 `upstream/main` 干跑第 3 步脚本（merge-file 输出写临时目录，不落工作树），复现 22 个 merged、15 个 fork-new、1 个 CONFLICT，合计 38；上游 `main` 相对锚点确为 12 个提交；唯一冲突仍是 `ExampleItem/index.js`；干跑结束后 `git status --porcelain` 为空。`master` 上按第 5 步跑 6 个 spec 为 6 suites / 98 tests 全绿。
 
 配方本身是可执行的，不是纸面流程。
 
