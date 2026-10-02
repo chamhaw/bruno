@@ -11,6 +11,11 @@ import StyledWrapper from './StyledWrapper';
 
 const MIN_COLUMN_WIDTH = 80;
 const ROW_HEIGHT = 35;
+const DEFAULT_ROW_CONFIG = {};
+const defaultIsRowEditable = () => true;
+const defaultIsCheckboxDisabled = () => false;
+const defaultGetRowClassName = () => '';
+const defaultGetRowTestId = () => undefined;
 
 const findScrollParent = (element) => {
   let parent = element?.parentElement;
@@ -86,7 +91,7 @@ const EditableTable = ({
   showDelete = true,
   disableCheckbox = false,
   onCheckboxChange,
-  rowConfig = {},
+  rowConfig = DEFAULT_ROW_CONFIG,
   checkboxLabel = '',
   checkboxKey = 'enabled',
   reorderable: reorderableProp = false,
@@ -100,10 +105,10 @@ const EditableTable = ({
   isDraft
 }) => {
   const {
-    isEditable: isRowEditable = () => true,
-    isCheckboxDisabled = () => false,
-    className: getRowClassName = () => '',
-    testId: getRowTestId = () => undefined,
+    isEditable: isRowEditable = defaultIsRowEditable,
+    isCheckboxDisabled = defaultIsCheckboxDisabled,
+    className: getRowClassName = defaultGetRowClassName,
+    testId: getRowTestId = defaultGetRowTestId,
     renderFullWidth: renderFullWidthRow,
     renderActionCell
   } = rowConfig;
@@ -283,14 +288,22 @@ const EditableTable = ({
   }, [rowsWithEmpty.length, isEmptyRow, showAddRow]);
 
   useEffect(() => {
-    if (rowsWithEmpty.length > prevRowCountRef.current && prevRowCountRef.current > 0) {
-      virtuosoRef.current?.scrollToIndex({
-        index: rowsWithEmpty.length - 1,
-        behavior: 'smooth'
-      });
+    const previousCount = prevRowCountRef.current;
+    const nextCount = rowsWithEmpty.length;
+    prevRowCountRef.current = nextCount;
+
+    // Only follow a newly appended empty add-row. Prepending default headers
+    // also grows the list and must not smooth-scroll to the bottom.
+    if (previousCount > 0 && nextCount === previousCount + 1) {
+      const lastIndex = nextCount - 1;
+      if (isLastEmptyRow(rowsWithEmpty[lastIndex], lastIndex)) {
+        virtuosoRef.current?.scrollToIndex({
+          index: lastIndex,
+          behavior: 'smooth'
+        });
+      }
     }
-    prevRowCountRef.current = rowsWithEmpty.length;
-  }, [rowsWithEmpty.length]);
+  }, [isLastEmptyRow, rowsWithEmpty]);
 
   const handleValueChange = useCallback((rowUid, key, value) => {
     const rowIndex = rowsWithEmpty.findIndex((r) => r.uid === rowUid);

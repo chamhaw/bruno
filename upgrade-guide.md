@@ -25,25 +25,14 @@ fork 主干与上游主线同名，都是 `main`。本指南约定：不带 remo
 
 litellm 的 release tag 打在上游 `main` 上，可以直接按 tag 锚定。**bruno 不是这样**：release tag 打在 `release/vX.Y.Z` 分支上，`upstream/main` 是开发主线，二者会分叉。
 
-实测结论：
+正式发布时优先取 release tag；只有版本尚未打 tag 时才临时取 release 分支头并记录 SHA。发布后的重新锚定必须走同一升级流程，不能只移动 baseline。
 
-- `git describe --tags --abbrev=0 upstream/main` 得到 `v3.0.0`，而 `v4.0.0`、`v4.1.0` 都不在 `upstream/main` 的祖先链上
-- 只有 `v0.x` 到 `v3.0.1` 的 tag 是 `upstream/main` 的祖先
-- `upstream/release/v4.2.0` 是当前最新 release 分支，它包含 fork 依赖的上游文件 `packages/bruno-app/src/utils/timeline/index.js`，而 `v4.0.0`、`v4.1.0` 都不包含
-
-因此**升级锚点取「上游最新 release 分支的头提交」**，等该版本正式打 tag 后再前移锚点到 tag 本身（见「重新锚定」）。
-
-当前锚点：
-
-```
-baseline/v4.2.0  =  upstream/release/v4.2.0 的 b84eca260  (2026-09-10)
-```
-
-`v4.2.0` tag 尚未发布，所以锚点先记 release 分支头的 SHA。前移锚点到 tag 时，只有 anchor 的 SHA 变了，合并配方一行都不用改。
+当前正式目标：`v4.2.0`，SHA `8efe082a915c8fe68e17e2772c4f6ebe971b7311`。
+候选分支 `upgrade/from_v4.2.0-preview-to-v4.2.0` 从旧基准 `b84eca26095d9e9bc1ed2b4abcefa6979fe68803` 合并正式 tag；验证完成并合入 `main` 后，才将 `baseline/v4.2.0` 轮转至正式 tag。
 
 ## 本 fork 的定制清单
 
-`main` 相对锚点的 delta 是 38 个文件、约 +2417/-135 行，落在 6 个特性上：
+正式 v4.2.0 候选相对正式 tag 的代码 delta 是 37 个文件，落在以下特性上：
 
 | 特性 | 承接的提交 |
 | --- | --- |
@@ -53,12 +42,12 @@ baseline/v4.2.0  =  upstream/release/v4.2.0 的 b84eca260  (2026-09-10)
 | openapi swagger2 同步 | `feat(openapi): support swagger2 sync` |
 | 请求示例按集合排序 | `feat(sidebar): sort request examples with collection sort order` |
 | 在请求中运行示例 | `feat: run request examples`<br>`refactor: make example try action side-effect free` |
-| watcher 忽略列表种子 | `fix(watcher): seed the bruno config store before the initial crawl` |
+| watcher 忽略列表种子 | 正式 v4.2.0 已包含相同修复；清退代码定制，保留回归测试 |
 
 随时可以用这条命令核对 fork 定制的规模。口径限定在 `packages/` 下，这样本指南、`upgrades/` 存档这类文档增删不会干扰数字：
 
 ```bash
-git diff --name-only baseline/v4.2.0..main -- packages/ | wc -l          # 期望 38
+git diff --name-only baseline/v4.2.0..main -- packages/ | wc -l          # 正式版本收尾后期望 37
 git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期望无输出
 ```
 
@@ -77,12 +66,12 @@ fork 的全部历史分支已于 2026-09-16 清理，`main` 是 fork 定制的�
 
 ### 0. 前置
 
-工作树必须干净，且依赖是最新的。本 repo 的 husky pre-commit hook 会跑 `npx nano-staged`，若 `node_modules` 相对当前 `package.json` 陈旧，hook 会因为找不到 plugin 而失败并挡住提交：
+工作树必须干净，且依赖与锁文件一致。安装依赖须先获得授权；已有依赖时只运行所需构建，禁止用 `npm run setup`，该脚本递归清理依赖并可能波及嵌套 worktree。本 repo 的 husky pre-commit hook 会跑 `npx nano-staged`，若 `node_modules` 相对当前 `package.json` 陈旧，hook 会因为找不到 plugin 而失败并挡住提交：
 
 ```bash
 git status --porcelain          # 必须为空
 nvm use                         # .nvmrc 钉的是 Node v22.12.0
-npm i --legacy-peer-deps        # 升级前先同步依赖，避免 hook 失败
+npm ci --legacy-peer-deps       # 仅在获准恢复依赖时执行，不改锁文件
 ```
 
 **分支基点判定**：第 2 步从 `main` 拉升级分支，前提是 `main` 已经是上一次升级的落点。若上一次的 `upgrade/from_*` 尚未并入 `main` 就开始下一次升级，第 1 步的 `git diff baseline/${OLD_ANCHOR}..main` 会把上次升级的全部改动一并算进本次 fork delta，patch 既无法归因也无法回放。
@@ -100,7 +89,7 @@ git log --oneline main..upgrade/from_<上次锚点对>    # 非空 = 确认未�
 git fetch upstream --tags --prune
 git checkout main
 mkdir -p upgrades
-git diff baseline/${OLD_ANCHOR}..main -- . ':(exclude)upgrades' > upgrades/${OLD_ANCHOR}..main.patch
+git diff baseline/${OLD_ANCHOR}..main -- packages/ > upgrades/${OLD_ANCHOR}..main.patch
 ```
 
 ### 2. 建升级分支，工作树换成新上游树
@@ -114,24 +103,26 @@ git read-tree -u --reset ${NEW_REF}
 
 ### 3. 把 fork 改动重放回新树（三方合并）
 
-关键点：每一处 `git merge-file` 的 base 取**旧锚点树**里的该文件，ours 取**新上游版本**，theirs 取**当前 fork 版本**。base 不能取 `git merge-base`，否则上游自己在锚点之后的改动会被当成 fork 改动而回退。
+关键点：每一处 `git merge-file` 的 base 取**旧锚点树**里的该文件，ours 取**新上游版本**，theirs 取**当前 fork 版本**。禁止未经核对采用 `git merge-base`，否则上游自己在锚点之后的改动可能被当成 fork 改动而回退。若已确认共同祖先恰好等于旧 baseline，可直接使用原生 `git merge --no-commit --no-ff <新上游>`；其三方合并的 base 与本配方一致。
 
 ```bash
-OLD_ANCHOR=baseline/v4.2.0
+OLD_BASE=baseline/v4.2.0
 NEW_REF=upstream/release/v4.3.0
 
-git diff --no-renames --name-status "$OLD_ANCHOR" main | while IFS=$'\t' read -r st path; do
+MERGE_TMP=$(mktemp -d)
+trap 'rm -rf "$MERGE_TMP"' EXIT
+git diff --no-renames --name-status "$OLD_BASE" main | while IFS=$'\t' read -r st path; do
   case "$st" in
     A|M)
-      if ! git cat-file -e "$OLD_ANCHOR:$path" 2>/dev/null; then
+      if ! git cat-file -e "$OLD_BASE:$path" 2>/dev/null; then
         git checkout main -- "$path"                      # fork 新增的文件，直接取 fork 版本
       elif ! git cat-file -e "$NEW_REF:$path" 2>/dev/null; then
         echo "REVIEW $path: 上游已删除但 fork 改过，需人工决定"
       else
-        git show "$NEW_REF:$path"    > /tmp/up-ours
-        git show "$OLD_ANCHOR:$path" > /tmp/up-base
-        git show "main:$path"      > /tmp/up-theirs
-        if git merge-file -p /tmp/up-ours /tmp/up-base /tmp/up-theirs > "$path"; then
+        git show "$NEW_REF:$path"    > "$MERGE_TMP/ours"
+        git show "$OLD_BASE:$path" > "$MERGE_TMP/base"
+        git show "main:$path"      > "$MERGE_TMP/theirs"
+        if git merge-file -p "$MERGE_TMP/ours" "$MERGE_TMP/base" "$MERGE_TMP/theirs" > "$path"; then
           echo "merged  $path"
         else
           echo "CONFLICT $path"
@@ -140,7 +131,7 @@ git diff --no-renames --name-status "$OLD_ANCHOR" main | while IFS=$'\t' read -r
       ;;
     D)
       if git cat-file -e "$NEW_REF:$path" 2>/dev/null && \
-         ! git diff --quiet "$OLD_ANCHOR" "$NEW_REF" -- "$path"; then
+         ! git diff --quiet "$OLD_BASE" "$NEW_REF" -- "$path"; then
         echo "REVIEW $path: fork 删除但上游改过，需人工决定"
       else
         git rm -f --ignore-unmatch "$path"
@@ -196,7 +187,10 @@ npx playwright test tests/collection/ tests/sidebar/ --project=default
 若构建报 `export 'xxx' was not found in '@usebruno/common/utils'` 一类错误，先怀疑内部包的 `dist` 陈旧，重跑
 
 ```bash
-npm i --legacy-peer-deps && npm run setup
+npm run build:bruno-common
+npm run build:bruno-converters
+npm run build:schema-types
+npm run build:bruno-filestore
 ```
 
 `packages/*/package.json` 里的依赖版本漂移（例如 `@rsbuild/core` 从 1.1.2 跳到 1.7.6）会让旧 `dist` 与新 `package.json` 不匹配，这类失败是环境陈旧，不是合并写坏了。
@@ -216,24 +210,21 @@ git branch -D baseline/${OLD_ANCHOR}
 git branch -D upgrade/from_${OLD_ANCHOR}-to-${NEW_ANCHOR}
 
 # 存档本次升级后的 fork delta，供下次升级对照
-git diff baseline/${NEW_ANCHOR}..main -- . ':(exclude)upgrades' > upgrades/${NEW_ANCHOR}..main.patch
+git diff baseline/${NEW_ANCHOR}..main -- packages/ > upgrades/${NEW_ANCHOR}..main.patch
 
+git add upgrade-guide.md upgrades/${NEW_ANCHOR}..main.patch
+git commit -m "docs: archive the verified fork delta"
+
+# main 推送须独立确认；普通候选分支和 baseline 使用显式 refspec
 git push origin main
 git push origin baseline/${NEW_ANCHOR}
 ```
 
 ## 重新锚定
 
-上游正式打出 `v4.2.0` tag 后，把锚点从 release 分支头前移到 tag 本身：
+release 分支头与正式 tag 不同，就以旧 baseline 为 base、正式 tag 为新上游、当前 fork 为 theirs，执行上面的完整升级和验证。相同 SHA 才允许直接更新文字说明。
 
-```bash
-git fetch upstream --tags
-git log --oneline upstream/release/v4.2.0...v4.2.0    # 先确认两者差异，通常 tag 是分支头的祖先或等价
-git branch -f baseline/v4.2.0 v4.2.0
-git push origin baseline/v4.2.0
-```
-
-记进本文件的「当前锚点」一节的 SHA 也要同步更新。
+验证并合入 `main` 后，先以独立名称保留旧基准，再将同名 baseline 指向正式 tag，重生成并提交代码 patch。远端 baseline 已存在且需非快进更新时，必须核对远端旧 SHA，并单独确认强推；不能隐式覆盖。
 
 ## 回滚方案
 
@@ -241,8 +232,8 @@ git push origin baseline/v4.2.0
 
 | 阶段 | 回滚动作 |
 | --- | --- |
-| 第 2 步之后 | `git checkout main` 后 `git branch -D upgrade/from_<锚点对>`，换过树的工作树直接丢弃 |
-| 第 3–5 步 | 同上。`upgrade/` 分支未并入 `main`，不留污染 |
+| 第 2 步之后 | 确认只丢弃本次升级改动后，`git reset --hard <升级前 main>`；再切回 `main` 并删除候选分支 |
+| 第 3–5 步 | 原生 merge 尚未提交时用 `git merge --abort`；换树配方用上一行的 reset。切回 `main` 后删除候选分支 |
 | 第 6 步 ff-merge 之后 | `main` 回退到升级前的提交：`git reset --hard <升级前 main>`；若已 push，再 `git push --force-with-lease origin main` |
 
 第 2 步换树会就地改动工作树，动手前先记下回滚锚点，否则 ff-merge 之后无法定位升级前的 `main`：
@@ -264,20 +255,32 @@ git rev-parse main    # 记下输出，作为本次升级的回滚锚点
 
 2026-09-16 复核：以同一 `upstream/main` 干跑第 3 步脚本（merge-file 输出写临时目录，不落工作树），复现 22 个 merged、15 个 fork-new、1 个 CONFLICT，合计 38；上游 `main` 相对锚点确为 12 个提交；唯一冲突仍是 `ExampleItem/index.js`；干跑结束后 `git status --porcelain` 为空。`main` 上按第 5 步跑 6 个 spec 为 6 suites / 98 tests 全绿。
 
-配方本身是可执行的，不是纸面流程。
+上述记录仅证明旧锚点干跑；不代表当前正式 tag 候选已通过构建或 E2E。
+
+## 正式 v4.2.0 候选验收（2026-10-02）
+
+- 旧基准 `b84eca260`，正式目标 `8efe082a9`；共同祖先与旧基准一致，采用原生三方 merge。
+- 冲突只涉及 ExampleItem 的 import 与 watcher 注释；两侧 import 保留。上游已包含 watcher 修复，清退代码定制、保留回归测试。
+- 相对正式 tag：37 个代码文件；锁文件无差异，归档 patch 与代码 delta 完全一致。
+- 定制回归：前端 14 suites / 138 tests，Electron 2 suites / 4 tests，全部通过；ExampleItem 夹具补齐上游多选状态与真实 DndProvider，不新增测试场景或生产兜底。
+- 内部包、JS sandbox 与网页构建通过。requests/converters 类型警告及网页远程图片下载警告仍存在；相关源码与正式上游一致。
+- 指定 Electron E2E 范围：201 passed / 5 skipped / 1 failed。跳过项来自上游已有的 `Close All Collections` describe.skip。
+- 唯一失败为 `tests/collection/multi-select/multi-select.spec.ts:371`：拖拽后展开 Folder A，定位器匹配两个 folder-chevron；正式 tag 独立源码工作树复跑得到相同错误。未将其计为通过，也未修改上游测试或拖拽行为。
+- OpenAPI 同步的转换回归通过；完整 UI 同步流程未人工验收。以上不是全仓库测试或完整产品 E2E 通过声明。
+- baseline 与 main 在候选验收期间不轮转；合入并推送 main 须独立确认。
 
 ## 硬规则
 
-- **禁止 rebase-diff 式迁移**。`git diff baseline > patch` 加 `git apply`（litellm 早期指南的写法）会在上游改动与 fork 改动同处一段时静默取一侧，从而悄悄回退上游内容。必须用第 3 步的 `git merge-file` 三方合并。
-- **三方合并的 base 必须是上一次的锚点树**，不能是 `git merge-base`。
+- **禁止 rebase-diff 式迁移**。将新上游与旧 fork 的反向 diff 直接 apply会在上游改动与 fork 改动同处一段时静默取一侧，从而悄悄回退上游内容。必须用第 3 步的 `git merge-file` 三方合并。
+- **三方合并的 base 必须是上一次的锚点树**；原生 merge 仅限共同祖先与旧锚点完全一致时使用。
 - **禁止 `-X theirs` / `-X ours` 整块取一侧**。历史上有一次 `-X theirs` 直接把上游在 `openapi-sync.js` 里的 `resolveEnvironmentInheritance` 改动回退了。
 - **不碰 `package-lock.json`**。fork 特性不应改动 lock；升级时锁文件取上游新版本，若合并过程把它卷进 fork delta，说明操作有误。
 - **绝不 push 到 `upstream`**。全程只 `fetch`。
 - **`git read-tree -u --reset` 与 `git checkout <ref> -- .` 会丢弃未提交改动**，执行前确认 `git status --porcelain` 为空。
-- **`git push` 前必须确认**。push 是外向不可逆操作。
+- **`main` 与受保护分支的 push 必须独立确认**；普通候选分支可直接 push，但必须显式写出目标分支。
 
 ## 排除可能性后仍失败时的排查顺序
 
 1. `git diff --name-only baseline/<锚点>..main | grep -i lock` 有输出 → 升级过程卷入了 lock，回退重做
-2. 构建报找不到某个 `@usebruno/*` 导出 → 内部包 `dist` 陈旧，重跑 `npm run setup`
+2. 构建报找不到某个 `@usebruno/*` 导出 → 内部包 `dist` 陈旧，按第 5 步重建对应内部包
 3. 测试失败但 `git diff` 显示该文件只是上游正规改动 → 说明锚点选错，检查是否误用了 `v4.0.0` / `v4.1.0` 这类不含依赖的旧锚点

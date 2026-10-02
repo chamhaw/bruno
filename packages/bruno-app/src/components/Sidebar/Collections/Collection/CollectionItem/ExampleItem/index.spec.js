@@ -3,6 +3,8 @@
  */
 import '@testing-library/jest-dom';
 import React from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 const mockDispatch = jest.fn();
@@ -10,7 +12,7 @@ const mockUseResponseExampleInRequest = jest.fn((payload) => () => ({ applied: t
 
 jest.mock('react-redux', () => ({
   useDispatch: () => mockDispatch,
-  useSelector: () => null
+  useSelector: (selector) => selector({ tabs: { activeTabUid: null }, collections: { selectedSidebarUids: [] } })
 }));
 
 jest.mock('providers/ReduxStore/slices/tabs', () => ({
@@ -19,6 +21,7 @@ jest.mock('providers/ReduxStore/slices/tabs', () => ({
 }));
 
 jest.mock('providers/ReduxStore/slices/collections', () => ({
+  ...jest.requireActual('providers/ReduxStore/slices/collections'),
   updateResponseExample: jest.fn(),
   cloneResponseExample: jest.fn()
 }));
@@ -58,7 +61,9 @@ describe('ExampleItem', () => {
   });
 
   it('adds Try to an HTTP example context menu only', () => {
-    const { rerender } = render(<ExampleItem item={item} collection={collection} example={example} />);
+    const { rerender } = render(<ExampleItem item={item} collection={collection} example={example} />, {
+      wrapper: ({ children }) => <DndProvider backend={HTML5Backend}>{children}</DndProvider>
+    });
 
     expect(screen.getByTestId('response-example-try-option')).toHaveTextContent('Try');
 
