@@ -11,6 +11,7 @@ import ResponseCopy from '../ResponseCopy/index';
 import StyledWrapper from './StyledWrapper';
 import { buildResponseDebugMarkdown } from 'utils/response/debugContextMarkdown';
 import IconSparkles from 'components/Icons/IconSparkles';
+import ActionIcon from 'ui/ActionIcon';
 
 const StyledMenuIcon = styled.button`
   display: flex;
@@ -187,6 +188,16 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
           data={data}
           dataBuffer={dataBuffer}
         />
+        <ActionIcon
+          className="p-1"
+          type="button"
+          title="Copy for AI"
+          aria-label="Copy for AI"
+          data-testid="response-copy-for-ai-btn"
+          onClick={copyForAI}
+        >
+          <IconSparkles size={16} strokeWidth={1.5} color="currentColor" />
+        </ActionIcon>
         {item.type !== 'graphql-request' && <ResponseBookmark ref={bookmarkButtonRef} item={item} collection={collection} responseSize={responseSize} />}
         <ResponseDownload ref={downloadButtonRef} item={item} />
         <ResponseClear ref={clearButtonRef} item={item} collection={collection} />

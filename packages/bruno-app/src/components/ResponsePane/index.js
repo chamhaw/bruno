@@ -27,7 +27,7 @@ import ResponsiveTabs from 'ui/ResponsiveTabs';
 import { buildSelectedRequestForResponseActions } from './copyForAIPayload';
 
 // Width threshold for expanded right-side action buttons
-const RIGHT_CONTENT_EXPANDED_WIDTH = 135;
+const RIGHT_CONTENT_EXPANDED_WIDTH = 161;
 
 const ResponsePane = ({ item, collection }) => {
   const dispatch = useDispatch();

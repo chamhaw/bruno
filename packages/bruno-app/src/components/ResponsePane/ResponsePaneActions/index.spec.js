@@ -48,6 +48,7 @@ jest.mock('../ResponseCopy', () => {
 });
 
 const theme = {
+  colors: { text: { muted: '#d1d5db' } },
   workspace: { border: '#374151' },
   dropdown: { iconColor: '#d1d5db' },
   app: { collection: { toolbar: { environmentSelector: { hoverBorder: '#60a5fa' } } } },
@@ -79,35 +80,37 @@ describe('ResponsePaneActions', () => {
     navigator.clipboard = { writeText: jest.fn().mockResolvedValue() };
   });
 
-  it('copies complete debug Markdown from the more-actions menu', async () => {
+  it.each(['menuitem', 'button'])('copies complete debug Markdown from the %s action', async (role) => {
     render(
-      <ThemeProvider theme={theme}>
-        <ResponsePaneActions
-          item={item}
-          collection={{ uid: 'col-1', name: 'Users API' }}
-          selectedRequest={{
-            itemUid: item.uid,
-            collectionUid: 'col-1',
-            data: {
-              request: item.request,
-              response: {
-                ...item.response,
-                timeline: [
-                  { type: 'request', message: 'DELETE https://api.example.com/v1/users/42' },
-                  { type: 'response', message: 'HTTP/1.1 404 Not Found' }
-                ]
+      <div className={role === 'button' ? 'expandable' : undefined}>
+        <ThemeProvider theme={theme}>
+          <ResponsePaneActions
+            item={item}
+            collection={{ uid: 'col-1', name: 'Users API' }}
+            selectedRequest={{
+              itemUid: item.uid,
+              collectionUid: 'col-1',
+              data: {
+                request: item.request,
+                response: {
+                  ...item.response,
+                  timeline: [
+                    { type: 'request', message: 'DELETE https://api.example.com/v1/users/42' },
+                    { type: 'response', message: 'HTTP/1.1 404 Not Found' }
+                  ]
+                }
               }
-            }
-          }}
-          responseSize={20}
-          selectedFormat="raw"
-          selectedTab="editor"
-          data={item.response.data}
-        />
-      </ThemeProvider>
+            }}
+            responseSize={20}
+            selectedFormat="raw"
+            selectedTab="editor"
+            data={item.response.data}
+          />
+        </ThemeProvider>
+      </div>
     );
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy for AI' }));
+    fireEvent.click(screen.getByRole(role, { name: 'Copy for AI' }));
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1));
     const copiedText = navigator.clipboard.writeText.mock.calls[0][0];

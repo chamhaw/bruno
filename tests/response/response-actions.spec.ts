@@ -62,4 +62,30 @@ test.describe('Response Pane Actions', () => {
       expect(clipboardText).toBe('cG9uZw==');
     });
   });
+
+  test('should copy AI debug context in wide and collapsed action layouts', async ({ page, createTmpDir }) => {
+    const collectionName = 'response-copy-ai-layout-test';
+    await createCollection(page, collectionName, await createTmpDir(collectionName));
+    await createRequest(page, 'copy-ai-test', collectionName, { url: 'http://localhost:8081/ping' });
+    await sendRequest(page, 200);
+
+    for (const width of [1800, 800]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate(() => navigator.clipboard.writeText(''));
+      const toolbar = page.locator('.actions-buttons');
+      if (width === 1800) {
+        await expect(toolbar).toBeVisible();
+        await toolbar.getByRole('button', { name: 'Copy for AI' }).click();
+      } else {
+        await expect(toolbar).toBeHidden();
+        await page.getByTestId('response-actions-menu').click();
+        await page.getByRole('menuitem', { name: 'Copy for AI' }).click();
+      }
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('# API Debug Context');
+      const text = await page.evaluate(() => navigator.clipboard.readText());
+      expect(text).toContain('# Request (cURL)');
+      expect(text).toContain('localhost:8081/ping');
+      expect(text).toContain('# Response');
+    }
+  });
 });

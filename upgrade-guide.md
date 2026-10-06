@@ -43,7 +43,7 @@ litellm 的 release tag 打在上游 `main` 上，可以直接按 tag 锚定。*
 | --- | --- |
 | timeline 头部视图切换 | `feat(timeline): add headers view toggle` |
 | timeline 网络日志复制 | `feat(timeline): add copy action for network logs` |
-| AI debug 上下文复制 | `feat(response): add copy for AI debug context`<br>`fix(response): preserve network logs in AI debug copy` |
+| AI debug 上下文复制（折叠菜单与宽屏工具栏） | `feat(response): add copy for AI debug context`<br>`fix(response): preserve network logs in AI debug copy`<br>`fix(response): show Copy for AI in wide toolbar` |
 | openapi swagger2 同步 | `feat(openapi): support swagger2 sync` |
 | 请求示例按集合排序 | `feat(sidebar): sort request examples with collection sort order` |
 | 在请求中运行示例 | `feat: run request examples`<br>`refactor: make example try action side-effect free` |
@@ -308,6 +308,8 @@ git rev-parse main    # 记下输出，作为本次升级的回滚锚点
 - 候选验收期间 baseline 与 main 未移动；2026-10-06 获得用户授权后合入并推送 main，baseline 轮转至正式 tag。此交付不将上述已知失败或未验收项改记为通过。
 
 ## 硬规则
+
+2026-10-06 宽屏 Copy for AI 回归：宽屏增加与折叠菜单共享复制逻辑的按钮，并扩大工具栏预留宽度。相关单测 2 suites / 9 tests 通过；Response Pane Actions Electron E2E 三项通过，覆盖普通复制、Base64 复制，以及 1800/800 像素下 AI 调试上下文复制。新增 AI 场景调用本地测试服务，不依赖外部 API。
 
 - **禁止 rebase-diff 式迁移**。将新上游与旧 fork 的反向 diff 直接 apply会在上游改动与 fork 改动同处一段时静默取一侧，从而悄悄回退上游内容。必须用第 3 步的 `git merge-file` 三方合并。
 - **三方合并的 base 必须是上一次的锚点树**；原生 merge 仅限共同祖先与旧锚点完全一致时使用。

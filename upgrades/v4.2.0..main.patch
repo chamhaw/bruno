@@ -542,7 +542,7 @@ index 000000000..b9f63e342
 +  });
 +});
 diff --git a/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js
-index b2f5680ef..eb2df837a 100644
+index b2f5680ef..f9dab2752 100644
 --- a/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js
 +++ b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.js
 @@ -1,6 +1,7 @@
@@ -553,16 +553,17 @@ index b2f5680ef..eb2df837a 100644
  import MenuDropdown from 'ui/MenuDropdown';
  import ResponseDownload from '../ResponseDownload';
  import ResponseBookmark from '../ResponseBookmark';
-@@ -8,6 +9,8 @@ import ResponseClear from '../ResponseClear';
+@@ -8,6 +9,9 @@ import ResponseClear from '../ResponseClear';
  import ResponseLayoutToggle, { useResponseLayoutToggle } from '../ResponseLayoutToggle';
  import ResponseCopy from '../ResponseCopy/index';
  import StyledWrapper from './StyledWrapper';
 +import { buildResponseDebugMarkdown } from 'utils/response/debugContextMarkdown';
 +import IconSparkles from 'components/Icons/IconSparkles';
++import ActionIcon from 'ui/ActionIcon';
  
  const StyledMenuIcon = styled.button`
    display: flex;
-@@ -37,7 +40,7 @@ const MenuIcon = forwardRef((props, ref) => (
+@@ -37,7 +41,7 @@ const MenuIcon = forwardRef((props, ref) => (
  
  MenuIcon.displayName = 'MenuIcon';
  
@@ -571,7 +572,7 @@ index b2f5680ef..eb2df837a 100644
    const { orientation } = useResponseLayoutToggle();
  
    // Refs to access child component imperative handles (click, isDisabled)
-@@ -47,6 +50,16 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+@@ -47,6 +51,16 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
    const copyButtonRef = useRef(null);
    const layoutToggleButtonRef = useRef(null);
  
@@ -588,7 +589,7 @@ index b2f5680ef..eb2df837a 100644
    /**
     * GQL response actions missing with Save response - because their is schema validation missing for saving GQL response will undo once example
     * scehem is updated
-@@ -61,6 +74,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+@@ -61,6 +75,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
        },
        onClick: () => copyButtonRef.current?.click()
      },
@@ -601,7 +602,7 @@ index b2f5680ef..eb2df837a 100644
      {
        id: 'download-response',
        label: 'Download response',
-@@ -100,6 +119,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+@@ -100,6 +120,12 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
        },
        onClick: () => copyButtonRef.current?.click()
      },
@@ -614,12 +615,29 @@ index b2f5680ef..eb2df837a 100644
      {
        id: 'save-response',
        label: 'Save response',
+@@ -162,6 +188,16 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
+           data={data}
+           dataBuffer={dataBuffer}
+         />
++        <ActionIcon
++          className="p-1"
++          type="button"
++          title="Copy for AI"
++          aria-label="Copy for AI"
++          data-testid="response-copy-for-ai-btn"
++          onClick={copyForAI}
++        >
++          <IconSparkles size={16} strokeWidth={1.5} color="currentColor" />
++        </ActionIcon>
+         {item.type !== 'graphql-request' && <ResponseBookmark ref={bookmarkButtonRef} item={item} collection={collection} responseSize={responseSize} />}
+         <ResponseDownload ref={downloadButtonRef} item={item} />
+         <ResponseClear ref={clearButtonRef} item={item} collection={collection} />
 diff --git a/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.spec.js b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.spec.js
 new file mode 100644
-index 000000000..67da15af3
+index 000000000..1aa8ae50e
 --- /dev/null
 +++ b/packages/bruno-app/src/components/ResponsePane/ResponsePaneActions/index.spec.js
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,165 @@
 +import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 +import { ThemeProvider } from 'styled-components';
 +import ResponsePaneActions from './index';
@@ -670,6 +688,7 @@ index 000000000..67da15af3
 +});
 +
 +const theme = {
++  colors: { text: { muted: '#d1d5db' } },
 +  workspace: { border: '#374151' },
 +  dropdown: { iconColor: '#d1d5db' },
 +  app: { collection: { toolbar: { environmentSelector: { hoverBorder: '#60a5fa' } } } },
@@ -701,35 +720,37 @@ index 000000000..67da15af3
 +    navigator.clipboard = { writeText: jest.fn().mockResolvedValue() };
 +  });
 +
-+  it('copies complete debug Markdown from the more-actions menu', async () => {
++  it.each(['menuitem', 'button'])('copies complete debug Markdown from the %s action', async (role) => {
 +    render(
-+      <ThemeProvider theme={theme}>
-+        <ResponsePaneActions
-+          item={item}
-+          collection={{ uid: 'col-1', name: 'Users API' }}
-+          selectedRequest={{
-+            itemUid: item.uid,
-+            collectionUid: 'col-1',
-+            data: {
-+              request: item.request,
-+              response: {
-+                ...item.response,
-+                timeline: [
-+                  { type: 'request', message: 'DELETE https://api.example.com/v1/users/42' },
-+                  { type: 'response', message: 'HTTP/1.1 404 Not Found' }
-+                ]
++      <div className={role === 'button' ? 'expandable' : undefined}>
++        <ThemeProvider theme={theme}>
++          <ResponsePaneActions
++            item={item}
++            collection={{ uid: 'col-1', name: 'Users API' }}
++            selectedRequest={{
++              itemUid: item.uid,
++              collectionUid: 'col-1',
++              data: {
++                request: item.request,
++                response: {
++                  ...item.response,
++                  timeline: [
++                    { type: 'request', message: 'DELETE https://api.example.com/v1/users/42' },
++                    { type: 'response', message: 'HTTP/1.1 404 Not Found' }
++                  ]
++                }
 +              }
-+            }
-+          }}
-+          responseSize={20}
-+          selectedFormat="raw"
-+          selectedTab="editor"
-+          data={item.response.data}
-+        />
-+      </ThemeProvider>
++            }}
++            responseSize={20}
++            selectedFormat="raw"
++            selectedTab="editor"
++            data={item.response.data}
++          />
++        </ThemeProvider>
++      </div>
 +    );
 +
-+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy for AI' }));
++    fireEvent.click(screen.getByRole(role, { name: 'Copy for AI' }));
 +
 +    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1));
 +    const copiedText = navigator.clipboard.writeText.mock.calls[0][0];
@@ -1377,17 +1398,21 @@ index 000000000..6157cd4d2
 +  }
 +});
 diff --git a/packages/bruno-app/src/components/ResponsePane/index.js b/packages/bruno-app/src/components/ResponsePane/index.js
-index eea06d16e..602da8370 100644
+index eea06d16e..08a4fca67 100644
 --- a/packages/bruno-app/src/components/ResponsePane/index.js
 +++ b/packages/bruno-app/src/components/ResponsePane/index.js
-@@ -24,6 +24,7 @@ import HeightBoundContainer from 'ui/HeightBoundContainer';
+@@ -24,9 +24,10 @@ import HeightBoundContainer from 'ui/HeightBoundContainer';
  import ResponseStopWatch from 'components/ResponsePane/ResponseStopWatch';
  import WSMessagesList from './WsResponsePane/WSMessagesList';
  import ResponsiveTabs from 'ui/ResponsiveTabs';
 +import { buildSelectedRequestForResponseActions } from './copyForAIPayload';
  
  // Width threshold for expanded right-side action buttons
- const RIGHT_CONTENT_EXPANDED_WIDTH = 135;
+-const RIGHT_CONTENT_EXPANDED_WIDTH = 135;
++const RIGHT_CONTENT_EXPANDED_WIDTH = 161;
+ 
+ const ResponsePane = ({ item, collection }) => {
+   const dispatch = useDispatch();
 @@ -274,6 +275,7 @@ const ResponsePane = ({ item, collection }) => {
            <ResponsePaneActions
              item={item}
