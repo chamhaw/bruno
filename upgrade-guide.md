@@ -77,6 +77,8 @@ git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期�
 | `origin/dev` | `2e2226e3b` | 有效定制已承接，字体修复 `b0d2012ef` 也已保留；两项有意放弃的行为见下文，已退役 |
 | `stash@{0}` | `f039056fd` | 仅把 app package version 从 `2.0.0` 改成 `3.5.3`；当前正式 tag 仍使用 `2.0.0`，不恢复此旧版本改动，暂保留存档 |
 
+`chore/fork-governance` 是此次治理的交付候选，在 `a3052df7e` 上只增加本指南变更；因此同时携带已验证的正式升级，但不包含 MCP。合入此分支会升级产品，不是单独修改文档；推送 main 前须明确确认这个范围。
+
 MCP 候选改动五个文件，其六项请求生成单测通过；与正式升级候选的 `git merge-tree --write-tree` 无文本冲突，但这不代表行为验收通过。合入前须验证新建、保存、重开后的 HTTP POST、headers 与 JSON-RPC body，并实际调用目标服务的 tools/list、tools/call。协议版本固定为 `2026-07-28`，目标服务兼容性未验证。不得把这些待验证项记成已完成。
 
 两个 worktree 均无未提交改动。MCP worktree 保持原锁；锁内 PID 已不存在，但会话归属未核实，不自动解锁或删除。忽略的依赖、构建产物及工具会话目录不作为 fork 功能，也不在此次清理中删除。
