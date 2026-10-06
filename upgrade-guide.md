@@ -33,7 +33,7 @@ litellm 的 release tag 打在上游 `main` 上，可以直接按 tag 锚定。*
 正式发布时优先取 release tag；只有版本尚未打 tag 时才临时取 release 分支头并记录 SHA。发布后的重新锚定必须走同一升级流程，不能只移动 baseline。
 
 当前正式目标：`v4.2.0`，SHA `8efe082a915c8fe68e17e2772c4f6ebe971b7311`。
-候选分支 `upgrade/from_v4.2.0-preview-to-v4.2.0` 从旧基准 `b84eca26095d9e9bc1ed2b4abcefa6979fe68803` 合并正式 tag；验证完成并合入 `main` 后，才将 `baseline/v4.2.0` 轮转至正式 tag。
+正式升级已合入产品 `main`，`baseline/v4.2.0` 固定在正式 tag `8efe082a915c8fe68e17e2772c4f6ebe971b7311`。旧基准 `b84eca26095d9e9bc1ed2b4abcefa6979fe68803` 与升级历史保留在 Git 提交中；已完成的升级及治理候选分支退役。MCP 功能保持独立候选，未合入产品。
 
 ## 本 fork 的定制清单
 
@@ -60,11 +60,11 @@ git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期�
 
 `main` 是唯一产品主干，但并非所有 fork 工作都已合入。核查范围包括 origin 的全部分支、全部本地分支、两个 worktree 和一项 stash；代码承接按补丁与目标行为判断，不只依赖提交祖先关系。此前“全部历史分支已清理”的说明不成立；此次完成备份与承接核查后，已删除八条远端历史分支。
 
-| 载体（含退役前 ref） | 核查时 SHA | 归属与处理 |
+| 载体（含退役前 ref） | 治理前 SHA | 归属与处理 |
 | --- | --- | --- |
-| `main` / `origin/main` | `bc889f15e` | 已集成定制，仍基于预发布锚点；正式升级尚未合入 |
-| `baseline/v4.2.0` | `b84eca260` | 固定旧锚点；正式升级进入产品主干后才移动到 `8efe082a9` |
-| `upgrade/from_v4.2.0-preview-to-v4.2.0` | `a3052df7e` | 已推送的正式升级候选；验收边界见下文，不包含 MCP |
+| `main` / `origin/main` | `bc889f15e` | 已合入正式升级与治理文档；验收边界见下文，不包含 MCP |
+| `baseline/v4.2.0` | `b84eca260` | 已轮转至正式 tag `8efe082a9`，保持固定且不跟踪可变分支 |
+| `upgrade/from_v4.2.0-preview-to-v4.2.0` | `a3052df7e` | 正式升级已进入产品主干，候选已退役；提交由 main 历史保留 |
 | `worktree-feat+mcp-new-request` / `origin/feat/mcp-new-request` | `e4a4b6de2` | 唯一未集成功能；远端备份完成，保留独立候选及锁定 worktree |
 | `origin/feat/timeline-network-copy` | `bb0fb9a3c` | 产品已承接，但上游 [PR #8869](https://github.com/usebruno/bruno/pull/8869) 仍 OPEN，保留贡献分支 |
 | `origin/feat/response-debug-copy-tools` | `cb7ba3ef6` | 被 network-copy 分支替代；上游 [PR #8868](https://github.com/usebruno/bruno/pull/8868) CLOSED，已退役 |
@@ -77,13 +77,13 @@ git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期�
 | `origin/dev` | `2e2226e3b` | 有效定制已承接，字体修复 `b0d2012ef` 也已保留；两项有意放弃的行为见下文，已退役 |
 | `stash@{0}` | `f039056fd` | 仅把 app package version 从 `2.0.0` 改成 `3.5.3`；当前正式 tag 仍使用 `2.0.0`，不恢复此旧版本改动，暂保留存档 |
 
-`chore/fork-governance` 是此次治理的交付候选，在 `a3052df7e` 上只增加本指南变更；因此同时携带已验证的正式升级，但不包含 MCP。合入此分支会升级产品，不是单独修改文档；推送 main 前须明确确认这个范围。
+本次治理通过 `chore/fork-governance` 在 `a3052df7e` 上增加本指南变更，正式升级与治理文档均已合入产品 main；治理候选已退役，提交保留在 main 历史中。MCP 不在此合入范围内。
 
 MCP 候选改动五个文件，其六项请求生成单测通过；与正式升级候选的 `git merge-tree --write-tree` 无文本冲突，但这不代表行为验收通过。合入前须验证新建、保存、重开后的 HTTP POST、headers 与 JSON-RPC body，并实际调用目标服务的 tools/list、tools/call。协议版本固定为 `2026-07-28`，目标服务兼容性未验证。不得把这些待验证项记成已完成。
 
 两个 worktree 均无未提交改动。MCP worktree 保持原锁；锁内 PID 已不存在，但会话归属未核实，不自动解锁或删除。忽略的依赖、构建产物及工具会话目录不作为 fork 功能，也不在此次清理中删除。
 
-上述八个历史分支均不受保护，无开放 PR；按精确 SHA 的 lease 与原子 push 删除完成。开放贡献、升级候选和 MCP 保留。后续退役也须重新 fetch、核对 SHA、PR 状态与可恢复备份，不能按本表旧快照直接删除。正式升级进入 main 后才轮转 baseline，检查 patch 与代码 delta 一致，随后退役已落入主干的升级及治理候选。
+上述八个历史分支均不受保护，无开放 PR；按精确 SHA 的 lease 与原子 push 删除完成。开放贡献和 MCP 保留；升级及治理候选在主干交付与基准轮转后退役。后续退役也须重新 fetch、核对 SHA、PR 状态与可恢复备份，不能按本表旧快照直接删除。
 
 本机已保存上述八个 ref 的完整历史 bundle：`.git/fork-archives/2026-10-06.L2g3Is/retired-origin-branches.bundle`，`git bundle verify` 通过，并在独立空 bare repo 恢复出八个相同 SHA 的 ref。备份不随仓库 push；保留本机存档，不能将临时目录或会过期的 reflog 视为唯一恢复来源。
 
@@ -305,7 +305,7 @@ git rev-parse main    # 记下输出，作为本次升级的回滚锚点
 - 指定 Electron E2E 范围：201 passed / 5 skipped / 1 failed。跳过项来自上游已有的 `Close All Collections` describe.skip。
 - 唯一失败为 `tests/collection/multi-select/multi-select.spec.ts:371`：拖拽后展开 Folder A，定位器匹配两个 folder-chevron；正式 tag 独立源码工作树复跑得到相同错误。未将其计为通过，也未修改上游测试或拖拽行为。
 - OpenAPI 同步的转换回归通过；完整 UI 同步流程未人工验收。以上不是全仓库测试或完整产品 E2E 通过声明。
-- baseline 与 main 在候选验收期间不轮转；合入并推送 main 须独立确认。
+- 候选验收期间 baseline 与 main 未移动；2026-10-06 获得用户授权后合入并推送 main，baseline 轮转至正式 tag。此交付不将上述已知失败或未验收项改记为通过。
 
 ## 硬规则
 
