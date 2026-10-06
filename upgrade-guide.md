@@ -18,6 +18,11 @@ fork 主干与上游主线同名，都是 `main`。本指南约定：不带 remo
 | `main` | fork 的唯一长期主干，= 上游锚点树 + fork 定制 |
 | `baseline/<锚点>` | 纯净的上游锚点树，不含任何 fork 改动，升级时作为三方合并的 base |
 | `upgrade/from_<旧锚点>-to_<新锚点>` | 升级期间的临时分支，完成验证后并入 `main` 并删除 |
+| `feat/*` | 独立功能候选；贡献上游的分支从实际 PR base 建立，产品内已有等价实现也须保留到 PR 关闭 |
+
+本仓库采用「正式 release 上的产品定制＋独立上游贡献」模式。`upstream/main` 提供贡献基线，不增加本地镜像 `main` 或产品 `master`；`integration/*` 不再作为第二条长期产品线。上游 PR 合并后，仍须确认产品所选 release 已包含等价行为，才能清退产品补丁。
+
+本机 `upstream` 的 push URL 为 `DISABLED`，fetch URL 保持官方仓库；其他 clone 也应单独设置只读推送目标。固定的 `baseline/*` 不跟踪可变的 release 分支，禁止通过 `git pull` 移动锚点。
 
 `origin` 与 `upstream` 的方向不能反。litellm、skill、脚本里的所有 SOP 都假定 `origin` 是自己的 fork。
 
@@ -51,9 +56,40 @@ git diff --name-only baseline/v4.2.0..main -- packages/ | wc -l          # 正�
 git diff --name-only baseline/v4.2.0..main -- packages/ | grep -i lock   # 期望无输出
 ```
 
-### 已清理的分支与有意放弃的实现
+### 分支与工作区治理（2026-10-06）
 
-fork 的全部历史分支已于 2026-09-16 清理，`main` 是 fork 定制的唯一载体。清理前逐个分支核对过定制内容是否已在 `main` 中，只有 `dev` 上有两项未进入 `main`，均已确认放弃：
+`main` 是唯一产品主干，但并非所有 fork 工作都已合入。核查范围包括 origin 的全部分支、全部本地分支、两个 worktree 和一项 stash；代码承接按补丁与目标行为判断，不只依赖提交祖先关系。此前“全部历史分支已清理”的说明不成立：远端仍保留八条可退役分支。
+
+| 载体 | 核查时 SHA | 归属与处理 |
+| --- | --- | --- |
+| `main` / `origin/main` | `bc889f15e` | 已集成定制，仍基于预发布锚点；正式升级尚未合入 |
+| `baseline/v4.2.0` | `b84eca260` | 固定旧锚点；正式升级进入产品主干后才移动到 `8efe082a9` |
+| `upgrade/from_v4.2.0-preview-to-v4.2.0` | `a3052df7e` | 已推送的正式升级候选；验收边界见下文，不包含 MCP |
+| `worktree-feat+mcp-new-request` / `origin/feat/mcp-new-request` | `e4a4b6de2` | 唯一未集成功能；远端备份完成，保留独立候选及锁定 worktree |
+| `origin/feat/timeline-network-copy` | `bb0fb9a3c` | 产品已承接，但上游 [PR #8869](https://github.com/usebruno/bruno/pull/8869) 仍 OPEN，保留贡献分支 |
+| `origin/feat/response-debug-copy-tools` | `cb7ba3ef6` | 被 network-copy 分支替代；上游 [PR #8868](https://github.com/usebruno/bruno/pull/8868) CLOSED，可退役 |
+| `origin/feat/copy-for-ai-debug-context` | `d23b1f373` | `0be35a9a6` 承接，`9df3313d9` 修正完整网络日志；可退役 |
+| `origin/feat/timeline-headers-view-toggle` | `65b6aacbb` | `959e6f323` 承接；字体偏好及只读 Bulk 已保留，可退役 |
+| `origin/feat/swagger2-openapi-sync-3-5-3` | `17d5e758d` | `97e9c55c9` 承接；旧版本差异不作为新功能重放，可退役 |
+| `origin/feat/swagger2-openapi-sync-4-0-0` | `c07199ba6` | 同上；转换适配器及回归测试内容一致，可退役 |
+| `origin/integration/response-debug-tools` | `0df2532b2` | 五项定制均被产品承接，不作为 PR 来源，可退役 |
+| `origin/integration/20260815-201157-response-debug-swagger2` | `565502798` | 上述定制及 watcher 均有归宿；正式上游已包含 watcher 修复，可退役 |
+| `origin/dev` | `2e2226e3b` | 有效定制已承接，字体修复 `b0d2012ef` 也已保留；两项有意放弃的行为见下文，可退役 |
+| `stash@{0}` | `f039056fd` | 仅把 app package version 从 `2.0.0` 改成 `3.5.3`；当前正式 tag 仍使用 `2.0.0`，不恢复此旧版本改动，暂保留存档 |
+
+MCP 候选改动五个文件，其六项请求生成单测通过；与正式升级候选的 `git merge-tree --write-tree` 无文本冲突，但这不代表行为验收通过。合入前须验证新建、保存、重开后的 HTTP POST、headers 与 JSON-RPC body，并实际调用目标服务的 tools/list、tools/call。协议版本固定为 `2026-07-28`，目标服务兼容性未验证。不得把这些待验证项记成已完成。
+
+两个 worktree 均无未提交改动。MCP worktree 保持原锁；锁内 PID 已不存在，但会话归属未核实，不自动解锁或删除。忽略的依赖、构建产物及工具会话目录不作为 fork 功能，也不在此次清理中删除。
+
+八个“可退役”分支尚未删除。执行删除前重新 fetch、核对表中 SHA 未变及 PR 状态；保留可恢复的 refs 或 bundle，再逐个删除明确的 origin ref。开放贡献、升级候选和 MCP 不在此清单内。正式升级进入 main 后才轮转 baseline，检查 patch 与代码 delta 一致，随后退役已落入主干的升级及治理候选。
+
+本机已保存上述八个 ref 的完整历史 bundle：`.git/fork-archives/2026-10-06.L2g3Is/retired-origin-branches.bundle`，`git bundle verify` 通过。备份不随仓库 push；删除远端前须确认此备份仍可用，不能将临时目录或会过期的 reflog 视为唯一恢复来源。
+
+新增功能必须记录其归属（上游贡献、长期定制、临时回补）、独立候选、产品承接提交和验收状态。只有所有仍有效的工作均已承接，或明确列为待验收/放弃，才能声明“梳理完成”；只有相应 refs 实际删除后才能声明“分支清理完成”。本表记录核查快照，后续变更须更新对应行，不保留过时的全量完成声明。
+
+### 有意放弃的实现
+
+以下历史行为不重新引入：
 
 - **Copy-for-AI 的凭据脱敏**。`dev` 曾实现 `REDACTED_VALUE`、`SENSITIVE_KEY_PATTERN` 与 `redactUrl` / `redactHeaderValue` / `redactText` / `redactStructuredValue`，对 curl 命令与 URL 行做掩码。`main` 保持明文，且 `packages/bruno-app/src/utils/response/debugContextMarkdown.spec.js` 显式断言 `- Authorization: Bearer test-token` 与 `password=query-secret` 原样出现在生成结果里。这是最终意图，不是缺陷。
 - **Devtools 时间线的非数组兜底**。`Devtools/Console/RequestDetailsPanel` 按数组处理 `response.timeline`，不为非数组输入构造兜底项。
